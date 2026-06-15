@@ -1,5 +1,21 @@
 # Buycott — Multi-model Task Pipeline
 
+## Mission Statement
+
+The purpose of this project is not a Luddistic rejection of AI. It's an interesting technology with some useful applications in domains and cases where accuracy, quality, maintainability, and accountability don't matter all that much. It is a rejection of the labs, hyperscalers, investment bankers, private equity firms, and the captive media industry that has driven a three+ year hype cycle that has done significant damage to the tech ecosystem, the economy, international relations, and the lives of people and communities that have been sacrificed on a pyre of money to a false god.
+
+In normal protests against a particular company or industry, you try to hit em where it hurts by not buying their product, in the hope that the losses will induce them to change their behavior. For the AI companies, however, just not using them doesn't really matter.  When they're already sitting at 900M "weekly average users", even if millions of people boycotted them, it would barely be a blip on the investor prospectuses they use for their absurd fundraising rounds. 
+
+Enter the Buycott, which exploits the fundamental failure of the AI industry to come up with a product model that doesn't depend on subsidizing usage in the range of 300-2000%. That means for every $1 of usage you pay for, they're paying $3-$20, maybe more. Even on inference, and also almost certainly (although to a lesser degree atm) on the token-based plans that some providers have started rolling out. "it's ok if we lose money on every sale, we'll make it up in volume" is now the height of based thought.
+
+That means that you can hurt them by using them in exactly the way they tell you to. You don't have to do anything nefarious, or against usage policies, or illegal. Just use their product and watch their money burn.
+
+If you're like a lot of people in the tech industry, even if you're not using these AI tools regularly,  you have subscriptions to these services because it's sort of necessary to keep up with what's going on in the ecosystem. There's probably a lot of idle time on those subs.  Put them to use. If you're someone in a community threatened by data centers, for $20/month you can do more damage than you'd achieve via the captured political process. Whatever the source of your antipathy, for the cost of one cup of coffee per week, you can leave an oversized crater in their finances. 
+
+Don't use this with your work accounts, that's not your money. Don't use it with token-based billing accounts without setting spend limits that you are comfortable with, and be aware that there's less certainty around the rate of subsidized consumption.
+
+---
+
 Buycott is a headless container that orchestrates a team of LLM agents to autonomously build software. You give it a product direction; it generates tasks, writes and tests code, reviews its own work, and ships versioned releases — continuously, without human intervention.
 
 ## How it works

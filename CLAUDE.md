@@ -1,5 +1,9 @@
 # CLAUDE.md — Buycott codebase guide
 
+## README rule
+
+**Always include the full content of `MISSION.md` verbatim at the top of `README.md`, under a `## Mission Statement` heading immediately after the title line.** This applies whenever regenerating or updating `README.md`. Do not summarize or paraphrase — paste the exact file contents.
+
 ## What this project is
 
 Buycott (Multi-model Task Pipeline) is a headless Go binary that orchestrates multiple LLM agents (PM, backend dev, frontend dev, copywriter, and custom roles) to autonomously build software. A PM agent receives a product direction, generates tasks, delegates them to role agents, reviews the output, and periodically decides whether to cut a release. Agents execute real code inside ephemeral Docker containers.
