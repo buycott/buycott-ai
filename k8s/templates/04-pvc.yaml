@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buycott-artifacts
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: buycott
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{STORAGE_CLASS}}
+  resources:
+    requests:
+      storage: {{ARTIFACTS_SIZE}}

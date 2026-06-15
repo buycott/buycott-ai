@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package buycott.v1;
+
+option go_package = "buycott/internal/grpcapi";
+
+service BuycottService {
+  // Pipeline control
+  rpc GetStatus(Empty)  returns (StatusResponse);
+  rpc Pause(Empty)      returns (Empty);
+  rpc Resume(Empty)     returns (Empty);
+
+  // Tasks
+  rpc ListTasks(ListTasksRequest)  returns (ListTasksResponse);
+  rpc GetTask(GetTaskRequest)      returns (TaskResponse);
+
+  // Events
+  rpc ListEvents(ListEventsRequest)    returns (ListEventsResponse);
+  rpc StreamEvents(Empty)              returns (stream EventResponse);
+
+  // Releases
+  rpc ListReleases(Empty) returns (ListReleasesResponse);
+
+  // Artifacts
+  rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
+
+  // Interactive chat with a running agent
+  // Server streams tokens as they are produced by the LLM.
+  // If inject=true the exchange is appended to the active task's history.
+  rpc Chat(ChatRequest) returns (stream ChatChunk);
+}
+
+message Empty {}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+
+message StatusResponse {
+  bool   running      = 1;
+  bool   paused       = 2;
+  Task   active_task  = 3;
+  int32  queue_length = 4;
+  int32  completed    = 5;
+  int32  escalated    = 6;
+}
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+message Task {
+  string   id                  = 1;
+  string   title               = 2;
+  string   description         = 3;
+  repeated string acceptance_criteria = 4;
+  string   assigned_role       = 5;
+  string   status              = 6;
+  int32    retry_count         = 7;
+  string   parent_task_id      = 8;
+  int64    created_at_unix     = 9;
+  int64    updated_at_unix     = 10;
+  // Full fields (only populated by GetTask, not ListTasks)
+  string   conversation_history_json = 11;
+  string   execution_results_json    = 12;
+}
+
+message ListTasksRequest {
+  string status_filter = 1; // empty = all
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+}
+
+message GetTaskRequest {
+  string id = 1;
+}
+
+message TaskResponse {
+  Task task = 1;
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+
+message EventResponse {
+  string id           = 1;
+  string type         = 2;
+  string payload_json = 3;
+  int64  created_at_unix = 4;
+}
+
+message ListEventsRequest {
+  int32 limit = 1; // 0 = all
+}
+
+message ListEventsResponse {
+  repeated EventResponse events = 1;
+}
+
+// ── Releases ──────────────────────────────────────────────────────────────────
+
+message ReleaseResponse {
+  string id           = 1;
+  string version      = 2;
+  string notes        = 3;
+  string path         = 4;
+  int64  created_at_unix = 5;
+}
+
+message ListReleasesResponse {
+  repeated ReleaseResponse releases = 1;
+}
+
+// ── Artifacts ─────────────────────────────────────────────────────────────────
+
+message ListArtifactsRequest {
+  string subpath = 1; // empty = root
+}
+
+message ArtifactEntry {
+  string path  = 1;
+  bool   is_dir = 2;
+  int64  size  = 3;
+}
+
+message ListArtifactsResponse {
+  repeated ArtifactEntry entries = 1;
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+
+message ChatRequest {
+  string role    = 1;
+  string message = 2;
+  bool   inject  = 3; // append exchange to active task's conversation history
+}
+
+message ChatChunk {
+  string text = 1;
+  bool   done = 2; // final chunk; text may be empty
+}

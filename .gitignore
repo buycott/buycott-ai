@@ -1,0 +1,54 @@
+# ── Build output ──────────────────────────────────────────────────────────────
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ── Go ────────────────────────────────────────────────────────────────────────
+*.test
+*.out
+/vendor/
+coverage.out
+coverage.html
+
+# ── Local runtime artifacts ───────────────────────────────────────────────────
+artifacts/
+*.db
+*.db-shm
+*.db-wal
+
+# ── Config / secrets ──────────────────────────────────────────────────────────
+# Copy from config.example.yaml; never commit real keys
+config.yaml
+.env
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Kubernetes generated manifests — contain API keys ─────────────────────────
+k8s/manifests/
+k8s/.config
+
+# ── OS / editor cruft ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.Spotlight-V100
+.Trashes
+
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.direnv/
+.envrc
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.dockerignore.local
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log

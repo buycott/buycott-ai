@@ -1,0 +1,66 @@
+name: buycott
+
+# Usage:
+#   BUYCOTT_DIRECTION="Build a CRM" docker compose up -d
+# Or via Makefile:
+#   make compose-up DIRECTION="Build a CRM"
+#
+# API keys are read from the environment (or a .env file).
+# Copy .env.example to .env and fill in your keys.
+
+x-buycott-image: &buycott-image
+  build: .
+  image: ${BUYCOTT_IMAGE:-buycott:latest}
+
+services:
+  pipeline:
+    <<: *buycott-image
+    command:
+      - buycott
+      - start
+      - --config
+      - /etc/buycott/config.yaml
+      - --no-dashboard
+      - "${BUYCOTT_DIRECTION:-Build a sample web application}"
+    ports:
+      - "${BUYCOTT_API_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - artifacts:/artifacts
+      - ./config.yaml:/etc/buycott/config.yaml:ro
+      - ./prompts:/etc/buycott/prompts:ro
+    environment:
+      - ANTHROPIC_API_KEY
+      - OPENAI_API_KEY
+      - GEMINI_API_KEY
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "buycott", "status", "--config", "/etc/buycott/config.yaml"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  dashboard:
+    <<: *buycott-image
+    command:
+      - buycott
+      - dashboard
+      - --server
+      - pipeline:8080
+      - --port
+      - "${BUYCOTT_DASHBOARD_PORT:-8000}"
+    ports:
+      - "${BUYCOTT_DASHBOARD_PORT:-8000}:8000"
+    depends_on:
+      pipeline:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  artifacts:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${ARTIFACTS_PATH:-./artifacts}

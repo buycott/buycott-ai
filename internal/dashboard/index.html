@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buycott Dashboard</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1c2129;--border:#30363d;
+  --text:#c9d1d9;--muted:#8b949e;--bright:#f0f6fc;
+  --green:#3fb950;--yellow:#d29922;--blue:#58a6ff;
+  --purple:#bc8cff;--red:#f85149;--orange:#ffa657;--indigo:#6e76ff;--teal:#39d353;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+
+/* ── Header ─────────────────────────────────────────────── */
+header{
+  position:sticky;top:0;z-index:10;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 24px;display:flex;align-items:stretch;gap:0;
+}
+.header-left{display:flex;align-items:center;gap:14px;padding:10px 0}
+.logo{font-size:17px;font-weight:700;color:var(--bright);letter-spacing:-.5px}
+.logo em{color:var(--indigo);font-style:normal}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 11px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid;
+}
+.badge.running{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.3);color:var(--green)}
+.badge.paused{background:rgba(210,153,34,.1);border-color:rgba(210,153,34,.3);color:var(--yellow)}
+.badge.stopped{background:rgba(139,148,158,.1);border-color:rgba(139,148,158,.3);color:var(--muted)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.dot.pulse{animation:blink 2s ease infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+#active-hdr{font-size:12px;color:var(--muted)}
+#active-hdr strong{color:var(--text)}
+.header-tabs{display:flex;align-items:stretch;margin-left:32px;gap:0}
+.tab-btn{
+  padding:0 18px;border:none;background:none;color:var(--muted);
+  font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+  border-bottom:2px solid transparent;transition:color .15s,border-color .15s;
+}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--bright);border-bottom-color:var(--indigo)}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:12px;padding:10px 0}
+#refresh-ts{font-size:11px;color:var(--muted);white-space:nowrap}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.view{display:none;padding:20px 24px;max-width:1600px;margin:0 auto}
+.view.active{display:block}
+
+/* ── Stats ──────────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.stat-val{font-size:30px;font-weight:700;color:var(--bright);line-height:1;margin-bottom:3px}
+.stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.stat.pend .stat-val{color:var(--yellow)}
+.stat.prog .stat-val{color:var(--blue)}
+.stat.done .stat-val{color:var(--green)}
+.stat.esc  .stat-val{color:var(--red)}
+.stat.rel  .stat-val{color:var(--purple)}
+
+/* ── Content grid ───────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:1fr 360px;gap:16px;margin-bottom:16px}
+@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+
+/* ── Cards ──────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.card+.card,.card+div>.card{margin-top:16px}
+.card-head{padding:10px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:11px;font-weight:700;color:var(--bright);
+  text-transform:uppercase;letter-spacing:.7px}
+.card-body{padding:16px}
+.hint{font-size:11px;color:var(--muted)}
+.no-data{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+
+/* ── Active task ────────────────────────────────────────── */
+.role-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;
+  background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.25);color:var(--blue);
+  margin-bottom:8px;font-family:monospace}
+.task-title{font-size:15px;font-weight:600;color:var(--bright);margin-bottom:6px}
+.task-meta{font-size:12px;color:var(--muted)}
+
+/* ── Task table ─────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;padding:8px 12px;border-bottom:1px solid var(--border)}
+td{padding:9px 12px;border-bottom:1px solid rgba(48,54,61,.4);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tr:hover td{background:rgba(255,255,255,.02)}
+.status-tag{display:inline-flex;align-items:center;gap:4px;
+  padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
+.status-tag.pending        {background:rgba(210,153,34,.1);color:var(--yellow)}
+.status-tag.in_progress    {background:rgba(88,166,255,.1);color:var(--blue)}
+.status-tag.pending_review {background:rgba(188,140,255,.1);color:var(--purple)}
+.status-tag.done           {background:rgba(63,185,80,.1);color:var(--green)}
+.status-tag.rejected       {background:rgba(255,166,87,.1);color:var(--orange)}
+.status-tag.escalated      {background:rgba(248,81,73,.1);color:var(--red)}
+.mono{font-family:monospace;font-size:11px;color:var(--muted)}
+.trunc{max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-link{background:none;border:none;cursor:pointer;padding:0;font:inherit;
+  color:var(--muted);font-size:11px}
+.btn-link:hover{color:var(--blue)}
+
+/* ── Event feed ─────────────────────────────────────────── */
+.event-feed{height:440px;overflow-y:auto;padding:0}
+.event-row{display:flex;gap:10px;padding:7px 16px;
+  border-bottom:1px solid rgba(48,54,61,.3);align-items:flex-start}
+.event-row:last-child{border-bottom:0}
+.ev-new{animation:fadein .35s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+.ev-time{font-size:11px;color:var(--muted);font-family:monospace;white-space:nowrap;min-width:44px;margin-top:1px}
+.ev-type{font-size:11px;font-weight:600;color:var(--indigo);font-family:monospace;min-width:110px}
+.ev-detail{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sse-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .3s}
+
+/* ── Releases ───────────────────────────────────────────── */
+.release-row{display:flex;align-items:baseline;gap:12px;padding:11px 16px;
+  border-bottom:1px solid rgba(48,54,61,.4)}
+.release-row:last-child{border-bottom:0}
+.rel-ver{font-weight:700;color:var(--purple);font-family:monospace;min-width:64px}
+.rel-date{font-size:12px;color:var(--muted);white-space:nowrap;min-width:110px}
+.rel-notes{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rel-path{font-size:11px;color:var(--muted);font-family:monospace;white-space:nowrap;margin-left:auto}
+
+/* ── Conversations view ──────────────────────────────────── */
+.conv-filters{display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+.conv-filters input,.conv-filters select{
+  background:var(--surface);border:1px solid var(--border);border-radius:6px;
+  color:var(--text);padding:6px 10px;font:inherit;font-size:13px;
+}
+.conv-filters input::placeholder{color:var(--muted)}
+.conv-filters button{
+  background:var(--indigo);color:#fff;border:none;border-radius:6px;
+  padding:6px 14px;font:inherit;font-size:13px;cursor:pointer;
+}
+.conv-filters button:hover{opacity:.85}
+
+/* Thread card */
+.thread{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  margin-bottom:10px;overflow:hidden;
+}
+.thread-head{
+  display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;
+  user-select:none;
+}
+.thread-head:hover{background:rgba(255,255,255,.02)}
+.thread-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.thread-head-info{flex:1;min-width:0}
+.thread-call{font-size:12px;font-weight:700;color:var(--bright)}
+.thread-sub{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thread-meta{font-size:11px;color:var(--muted);white-space:nowrap;text-align:right}
+.thread-tokens{font-size:11px;color:var(--muted)}
+.thread-chevron{color:var(--muted);transition:transform .2s;flex-shrink:0}
+.thread.open .thread-chevron{transform:rotate(90deg)}
+.thread-body{display:none;border-top:1px solid var(--border)}
+.thread.open .thread-body{display:block}
+
+/* Message bubbles */
+.msg{padding:12px 16px;display:flex;gap:10px}
+.msg+.msg{border-top:1px solid rgba(48,54,61,.3)}
+.msg-icon{
+  width:28px;height:28px;border-radius:6px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;margin-top:1px;
+}
+.msg-body{flex:1;min-width:0}
+.msg-label{font-size:11px;font-weight:600;margin-bottom:4px}
+.msg-content{
+  font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;
+  max-height:300px;overflow-y:auto;
+}
+.msg-content.collapsed{max-height:72px;overflow:hidden;position:relative}
+.msg-content.collapsed::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:32px;
+  background:linear-gradient(transparent,var(--surface));
+}
+.msg-expand{
+  background:none;border:none;color:var(--blue);cursor:pointer;
+  font:inherit;font-size:11px;padding:4px 0;
+}
+/* Role-specific colours */
+.msg.system .msg-icon{background:rgba(139,148,158,.15);color:var(--muted)}
+.msg.system .msg-label{color:var(--muted)}
+.msg.user   .msg-icon{background:rgba(88,166,255,.15);color:var(--blue)}
+.msg.user   .msg-label{color:var(--blue)}
+.msg.assistant .msg-icon{background:rgba(63,185,80,.15);color:var(--green)}
+.msg.assistant .msg-label{color:var(--green)}
+.msg.response  .msg-icon{background:rgba(63,185,80,.15);color:var(--green)}
+.msg.response  .msg-label{color:var(--green)}
+
+/* call-type dot colours */
+.ct-process_task  {background:var(--blue)}
+.ct-review_task   {background:var(--yellow)}
+.ct-generate_tasks{background:var(--green)}
+.ct-check_release {background:var(--purple)}
+.ct-chat          {background:var(--teal)}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Rate-limit banner ───────────────────────────────────── */
+.rl-banner{
+  background:rgba(248,81,73,.07);border:1px solid rgba(248,81,73,.3);
+  border-radius:8px;padding:12px 16px;
+}
+.rl-title{font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;
+  letter-spacing:.7px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.rl-grid{display:flex;flex-direction:column;gap:6px}
+.rl-row{display:flex;align-items:center;gap:12px;font-size:12px}
+.rl-role{font-weight:700;color:var(--orange);min-width:90px}
+.rl-countdown{color:var(--muted)}
+.rl-attempt{color:var(--red);font-size:11px}
+.event-row.rl-hit .ev-type{color:var(--red)}
+.event-row.rl-cleared .ev-type{color:var(--green)}
+
+/* ── Token stats ─────────────────────────────────────────── */
+.stats-table{width:100%;border-collapse:collapse;font-size:12px}
+.stats-table th{color:var(--muted);font-weight:600;text-align:left;padding:4px 8px;border-bottom:1px solid var(--border)}
+.stats-table td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.04)}
+.stats-table tr:last-child td{border-bottom:none}
+.cost-val{color:var(--green);font-weight:700}
+.stats-total{font-weight:700;color:var(--text)}
+
+/* ── Task detail modal ───────────────────────────────────── */
+.modal-section{margin-bottom:16px}
+.modal-section h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px}
+.criteria-list{list-style:none;padding:0;margin:0}
+.criteria-list li{font-size:12px;padding:3px 0;color:var(--text)}
+.criteria-list li::before{content:"✓ ";color:var(--green)}
+.history-msg{background:var(--surface);border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12px}
+.history-msg .msg-role{font-weight:700;color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:4px}
+.history-msg pre{margin:0;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.exec-result{background:var(--surface);border-radius:6px;padding:8px 10px;font-size:12px}
+.exec-result pre{margin:0;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">Buycott <em>Dashboard</em></div>
+    <div id="status-badge" class="badge stopped">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-label">Connecting…</span>
+    </div>
+    <div id="active-hdr"></div>
+  </div>
+
+  <div class="header-tabs">
+    <button class="tab-btn active" onclick="showTab('pipeline')">Pipeline</button>
+    <button class="tab-btn" onclick="showTab('conversations')">Conversations</button>
+  </div>
+
+  <div class="header-right">
+    <div id="refresh-ts"></div>
+  </div>
+</header>
+
+<!-- ════════════════════ PIPELINE VIEW ════════════════════ -->
+<div id="view-pipeline" class="view active">
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat pend"><div class="stat-val" id="s-pend">—</div><div class="stat-lbl">Pending</div></div>
+    <div class="stat prog"><div class="stat-val" id="s-prog">—</div><div class="stat-lbl">In Progress</div></div>
+    <div class="stat done"><div class="stat-val" id="s-done">—</div><div class="stat-lbl">Completed</div></div>
+    <div class="stat esc"> <div class="stat-val" id="s-esc">—</div> <div class="stat-lbl">Escalated</div></div>
+    <div class="stat rel"> <div class="stat-val" id="s-rel">—</div> <div class="stat-lbl">Releases</div></div>
+  </div>
+
+  <!-- Rate-limit banner (hidden when none) -->
+  <div id="rl-panel" style="display:none;margin-bottom:16px"></div>
+
+  <!-- Main grid -->
+  <div class="grid">
+    <!-- Left column -->
+    <div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">Active Task</span></div>
+        <div class="card-body" id="active-body">
+          <div class="no-data">No task currently running</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head">
+          <span class="card-title">Recent Tasks</span>
+          <span class="hint">auto-refresh 5 s · click 💬 to view conversation</span>
+        </div>
+        <div id="tasks-body"><div class="no-data">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- Right column: live events -->
+    <div class="card" style="height:fit-content">
+      <div class="card-head">
+        <span class="card-title">Live Events</span>
+        <div id="sse-dot"></div>
+      </div>
+      <div class="event-feed" id="event-feed">
+        <div class="no-data">Connecting to event stream…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Releases -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">Releases</span></div>
+    <div id="releases-body"><div class="no-data">Loading…</div></div>
+  </div>
+
+  <!-- Token / Cost stats -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-head">
+      <span class="card-title">Token Usage</span>
+      <span class="hint">estimated cost · refreshes with status</span>
+    </div>
+    <div id="stats-body"><div class="no-data">Loading…</div></div>
+  </div>
+</div>
+
+<!-- ════════════ TASK DETAIL MODAL ════════════════════════ -->
+<div id="task-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+  <div style="max-width:800px;margin:40px auto;padding:0 16px 40px">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title" id="modal-title">Task Detail</span>
+        <button class="btn-link" onclick="closeModal()" style="font-size:18px;line-height:1">✕</button>
+      </div>
+      <div class="card-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ CONVERSATIONS VIEW ════════════════ -->
+<div id="view-conversations" class="view">
+  <div class="conv-filters">
+    <select id="conv-role-sel">
+      <option value="">All roles</option>
+      <option value="pm">pm</option>
+      <option value="backend">backend</option>
+      <option value="frontend">frontend</option>
+      <option value="copywriter">copywriter</option>
+    </select>
+    <select id="conv-type-sel">
+      <option value="">All types</option>
+      <option value="process_task">process_task</option>
+      <option value="review_task">review_task</option>
+      <option value="generate_tasks">generate_tasks</option>
+      <option value="check_release">check_release</option>
+      <option value="chat">chat</option>
+    </select>
+    <input id="conv-task-inp" placeholder="Filter by task ID…" style="width:220px">
+    <button onclick="loadConversations()">Apply</button>
+    <span class="hint" style="margin-left:4px" id="conv-count"></span>
+  </div>
+  <div id="conv-list"><div class="no-data">Loading conversations…</div></div>
+</div>
+
+<script>
+// ── Utilities ────────────────────────────────────────────────────────────────
+function esc(s){
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+function timeStr(v){
+  if(!v)return''
+  return new Date(v).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+}
+function dtStr(v){
+  if(!v)return''
+  return new Date(v).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+}
+function ago(v){
+  if(!v)return''
+  const s=Math.max(0,Math.floor((Date.now()-new Date(v))/1000))
+  if(s<60)return s+'s ago'
+  if(s<3600)return Math.floor(s/60)+'m ago'
+  return Math.floor(s/3600)+'h ago'
+}
+function statusTag(s){
+  return`<span class="status-tag ${s}">${esc(s.replace(/_/g,' '))}</span>`
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+function showTab(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'))
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'))
+  document.getElementById('view-'+name).classList.add('active')
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    if(b.textContent.toLowerCase()===name||b.getAttribute('onclick')?.includes(name))
+      b.classList.add('active')
+  })
+  if(name==='conversations') loadConversations()
+}
+
+// ── Pipeline: Status ─────────────────────────────────────────────────────────
+async function fetchStatus(){
+  const r=await fetch('/api/status')
+  applyStatus(await r.json())
+}
+function countdownStr(retryAt){
+  if(!retryAt)return'soon'
+  const secs=Math.max(0,Math.ceil((new Date(retryAt)-Date.now())/1000))
+  if(secs===0)return'now'
+  const m=Math.floor(secs/60),s=secs%60
+  return m>0?`${m}m ${s}s`:`${s}s`
+}
+function applyStatus(d){
+  const badge=document.getElementById('status-badge')
+  const dot=document.getElementById('status-dot')
+  const lbl=document.getElementById('status-label')
+  badge.className='badge'
+  dot.classList.remove('pulse')
+  if(d.running&&!d.paused){badge.classList.add('running');dot.classList.add('pulse');lbl.textContent='Running'}
+  else if(d.paused){badge.classList.add('paused');lbl.textContent='Paused'}
+  else{badge.classList.add('stopped');lbl.textContent='Stopped'}
+  document.getElementById('s-pend').textContent=d.queue_length??0
+  document.getElementById('s-prog').textContent=d.active_task?1:0
+  document.getElementById('s-done').textContent=d.completed??0
+  document.getElementById('s-esc').textContent=d.escalated??0
+  const hdr=document.getElementById('active-hdr')
+  hdr.innerHTML=d.active_task?`Active: <strong>${esc(d.active_task.title)}</strong>`:''
+  renderActive(d.active_task)
+  // Rate-limit panel
+  const rlPanel=document.getElementById('rl-panel')
+  const rl=d.rate_limited||[]
+  if(rl.length){
+    rlPanel.style.display='block'
+    rlPanel.innerHTML=`<div class="rl-banner">
+      <div class="rl-title">&#9646;&#9646; Rate Limited — waiting to retry</div>
+      <div class="rl-grid">${rl.map(r=>`
+        <div class="rl-row">
+          <span class="rl-role">${esc(r.role)}</span>
+          <span class="rl-countdown">retrying in ${countdownStr(r.retry_at)}</span>
+          <span class="rl-attempt">attempt ${r.attempt}</span>
+        </div>`).join('')}
+      </div>
+    </div>`
+  }else{
+    rlPanel.style.display='none'
+    rlPanel.innerHTML=''
+  }
+}
+function renderActive(t){
+  const el=document.getElementById('active-body')
+  if(!t){el.innerHTML='<div class="no-data">No task currently running</div>';return}
+  el.innerHTML=`
+    <div class="role-pill">${esc(t.assigned_role)}</div>
+    <div class="task-title">${esc(t.title)}</div>
+    <div class="task-meta">
+      ID&nbsp;<span class="mono">${esc(t.id.slice(0,8))}</span>
+      &nbsp;·&nbsp; Retries: ${t.retry_count??0}
+      &nbsp;·&nbsp; Updated: ${ago(t.updated_at)}
+      ${t.parent_task_id?'&nbsp;·&nbsp; subtask':''}
+      &nbsp;&nbsp;<button class="btn-link" onclick="viewTaskConversation('${esc(t.id)}')">💬 conversation</button>
+    </div>`
+}
+
+// ── Pipeline: Tasks ──────────────────────────────────────────────────────────
+async function fetchTasks(){
+  const r=await fetch('/api/tasks')
+  renderTasks(await r.json()||[])
+}
+function renderTasks(tasks){
+  const el=document.getElementById('tasks-body')
+  if(!tasks.length){el.innerHTML='<div class="no-data">No tasks yet</div>';return}
+  const sorted=[...tasks].sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,40)
+  el.innerHTML=`<table>
+    <thead><tr><th>Status</th><th>Role</th><th>Title</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+    ${sorted.map(t=>`<tr>
+      <td>${statusTag(t.status)}</td>
+      <td><span class="mono">${esc(t.assigned_role)}</span></td>
+      <td class="trunc" style="cursor:pointer" onclick="openTaskDetail('${esc(t.id)}')">${esc(t.title)}</td>
+      <td style="font-size:12px;color:var(--muted)">${ago(t.updated_at)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-link" onclick="openTaskDetail('${esc(t.id)}')" title="Detail">🔍</button>
+        <button class="btn-link" onclick="viewTaskConversation('${esc(t.id)}')" title="Conversations">💬</button>
+      </td>
+    </tr>`).join('')}
+    </tbody></table>`
+}
+
+// ── Pipeline: Releases ───────────────────────────────────────────────────────
+async function fetchReleases(){
+  const r=await fetch('/api/releases')
+  const rels=await r.json()||[]
+  renderReleases(rels)
+  document.getElementById('s-rel').textContent=rels.length
+}
+function renderReleases(rels){
+  const el=document.getElementById('releases-body')
+  if(!rels.length){el.innerHTML='<div class="no-data">No releases yet</div>';return}
+  el.innerHTML=[...rels].reverse().map(r=>`
+    <div class="release-row">
+      <span class="rel-ver">v${esc(r.version)}</span>
+      <span class="rel-date">${dtStr(r.created_at)}</span>
+      <span class="rel-notes">${esc(r.notes)}</span>
+      <span class="rel-path">${esc(r.path)}</span>
+    </div>`).join('')
+}
+
+// ── Pipeline: Events (SSE) ───────────────────────────────────────────────────
+const seenIds=new Set()
+async function initEvents(){
+  const r=await fetch('/api/events?limit=100')
+  const evs=await r.json()||[]
+  const feed=document.getElementById('event-feed')
+  feed.innerHTML=''
+  for(const e of evs) appendEvent(e,false)
+  const since=Math.floor(Date.now()/1000)
+  const es=new EventSource(`/events?since=${since}`)
+  const dot=document.getElementById('sse-dot')
+  es.onopen=()=>dot.style.background='var(--green)'
+  es.onerror=()=>dot.style.background='var(--red)'
+  es.onmessage=e=>{
+    dot.style.background='var(--green)'
+    try{appendEvent(JSON.parse(e.data),true)}catch{}
+  }
+}
+function appendEvent(ev,isNew){
+  if(seenIds.has(ev.id))return
+  seenIds.add(ev.id)
+  const feed=document.getElementById('event-feed')
+  const p=ev.payload||{}
+  let detail
+  if(ev.type==='rate_limit.hit'){
+    const retryAt=p.retry_at_unix?new Date(p.retry_at_unix*1000).toLocaleTimeString():''
+    detail=`${p.role||''} — retry at ${retryAt} (attempt ${p.attempt??'?'})`
+  }else if(ev.type==='rate_limit.cleared'){
+    detail=`${p.role||''} — resumed`
+  }else{
+    detail=p.title||p.version&&'v'+p.version||p.task_id?.slice(0,8)||p.role||
+      Object.entries(p).slice(0,2).map(([k,v])=>`${k}=${JSON.stringify(v)}`).join(' ')
+  }
+  const rlClass=ev.type==='rate_limit.hit'?' rl-hit':ev.type==='rate_limit.cleared'?' rl-cleared':''
+  const row=document.createElement('div')
+  row.className='event-row'+(isNew?' ev-new':'')+rlClass
+  row.innerHTML=`
+    <span class="ev-time">${timeStr(ev.created_at)}</span>
+    <span class="ev-type">${esc(ev.type)}</span>
+    <span class="ev-detail" title="${esc(detail)}">${esc(detail)}</span>`
+  feed.insertBefore(row,feed.firstChild)
+  const rows=feed.querySelectorAll('.event-row')
+  if(rows.length>300) rows[rows.length-1].remove()
+}
+
+// ── Conversations view ───────────────────────────────────────────────────────
+const ctColors={
+  process_task:'var(--blue)',review_task:'var(--yellow)',
+  generate_tasks:'var(--green)',check_release:'var(--purple)',chat:'var(--teal)'
+}
+const roleIcons={system:'⚙',user:'▶',assistant:'◀'}
+const roleBg={system:'rgba(139,148,158,.12)',user:'rgba(88,166,255,.12)',assistant:'rgba(63,185,80,.12)'}
+const roleColor={system:'var(--muted)',user:'var(--blue)',assistant:'var(--green)'}
+
+async function loadConversations(){
+  const role=document.getElementById('conv-role-sel').value
+  const callType=document.getElementById('conv-type-sel').value
+  const taskID=document.getElementById('conv-task-inp').value.trim()
+  let url='/api/conversations?limit=100'
+  if(role) url+=`&role=${encodeURIComponent(role)}`
+  if(taskID) url+=`&task_id=${encodeURIComponent(taskID)}`
+  const r=await fetch(url)
+  let logs=await r.json()||[]
+  if(callType) logs=logs.filter(l=>l.call_type===callType)
+  renderConversations(logs)
+}
+
+function renderConversations(logs){
+  const el=document.getElementById('conv-list')
+  document.getElementById('conv-count').textContent=logs.length?`${logs.length} exchanges`:''
+  if(!logs.length){el.innerHTML='<div class="no-data">No conversation logs found</div>';return}
+  el.innerHTML=''
+  for(const l of logs) el.appendChild(buildThread(l))
+}
+
+function buildThread(l){
+  const ct=l.call_type||'unknown'
+  const color=ctColors[ct]||'var(--muted)'
+  const totalMsgs=(l.messages||[]).length+(l.response?1:0)
+  let tokenInfo=''
+  if(l.input_tokens+l.output_tokens>0)
+    tokenInfo=`${l.input_tokens.toLocaleString()} in · ${l.output_tokens.toLocaleString()} out · `
+  const dur=l.duration_ms>0?`${(l.duration_ms/1000).toFixed(2)}s`:''
+
+  const div=document.createElement('div')
+  div.className='thread'
+  div.innerHTML=`
+    <div class="thread-head" onclick="toggleThread(this.closest('.thread'))">
+      <div class="thread-dot ct-${ct}" style="background:${color}"></div>
+      <div class="thread-head-info">
+        <div class="thread-call">
+          ${esc(ct.replace(/_/g,' '))}
+          <span class="mono" style="font-weight:400;color:var(--muted)"> · ${esc(l.role)} · ${esc(l.model)}</span>
+        </div>
+        <div class="thread-sub">
+          ${l.task_id?`task <span class="mono">${esc(l.task_id.slice(0,8))}</span> · `:''}
+          ${totalMsgs} message${totalMsgs!==1?'s':''}
+        </div>
+      </div>
+      <div class="thread-meta">
+        <div>${timeStr(l.created_at)}</div>
+        <div class="thread-tokens">${tokenInfo}${dur}</div>
+      </div>
+      <span class="thread-chevron">▶</span>
+    </div>
+    <div class="thread-body">${buildMessages(l)}</div>`
+  return div
+}
+
+function buildMessages(l){
+  let html=''
+  for(const m of (l.messages||[])){
+    html+=buildMsg(m.role,m.content)
+  }
+  if(l.response){
+    html+=buildMsg('assistant',l.response)
+  }
+  return html||'<div class="no-data" style="padding:12px">No messages</div>'
+}
+
+function buildMsg(role,content){
+  const icon=roleIcons[role]||'?'
+  const bg=roleBg[role]||'rgba(255,255,255,.05)'
+  const col=roleColor[role]||'var(--text)'
+  const isSystem=role==='system'
+  // Collapse long content (system prompts especially)
+  const long=content.length>400
+  const id='msg-'+Math.random().toString(36).slice(2)
+  return`<div class="msg ${role}">
+    <div class="msg-icon" style="background:${bg};color:${col}">${icon}</div>
+    <div class="msg-body">
+      <div class="msg-label">${esc(role)}</div>
+      <div class="msg-content ${long&&isSystem?'collapsed':''}" id="${id}">${esc(content)}</div>
+      ${long&&isSystem?`<button class="msg-expand" onclick="expandMsg('${id}',this)">Show full system prompt ▾</button>`:''}
+    </div>
+  </div>`
+}
+
+function expandMsg(id,btn){
+  const el=document.getElementById(id)
+  el.classList.remove('collapsed')
+  btn.remove()
+}
+
+function toggleThread(el){
+  el.classList.toggle('open')
+}
+
+// Open conversations tab filtered to a specific task
+function viewTaskConversation(taskId){
+  document.getElementById('conv-task-inp').value=taskId
+  document.getElementById('conv-role-sel').value=''
+  document.getElementById('conv-type-sel').value=''
+  showTab('conversations')
+}
+
+// ── Token stats ───────────────────────────────────────────────────────────────
+async function fetchStats(){
+  try{
+    const r=await fetch('/api/stats')
+    renderStats(await r.json()||[])
+  }catch{}
+}
+function renderStats(rows){
+  const el=document.getElementById('stats-body')
+  if(!rows.length){el.innerHTML='<div class="no-data">No LLM calls logged yet</div>';return}
+  // Aggregate totals
+  let totalIn=0,totalOut=0,totalCost=0,totalCalls=0
+  rows.forEach(r=>{totalIn+=r.input_tokens;totalOut+=r.output_tokens;totalCost+=r.est_cost_usd;totalCalls+=r.calls})
+  el.innerHTML=`<table class="stats-table">
+    <thead><tr><th>Role</th><th>Model</th><th>Calls</th><th>Input tok</th><th>Output tok</th><th>Est. cost</th></tr></thead>
+    <tbody>
+    ${rows.map(r=>`<tr>
+      <td><span class="mono">${esc(r.role)}</span></td>
+      <td style="color:var(--muted);font-size:11px">${esc(r.model.replace(/^[^/]+\//,''))}</td>
+      <td>${r.calls.toLocaleString()}</td>
+      <td>${r.input_tokens.toLocaleString()}</td>
+      <td>${r.output_tokens.toLocaleString()}</td>
+      <td class="cost-val">$${r.est_cost_usd.toFixed(4)}</td>
+    </tr>`).join('')}
+    <tr style="border-top:1px solid var(--border)">
+      <td colspan="2" class="stats-total">Total</td>
+      <td class="stats-total">${totalCalls.toLocaleString()}</td>
+      <td class="stats-total">${totalIn.toLocaleString()}</td>
+      <td class="stats-total">${totalOut.toLocaleString()}</td>
+      <td class="cost-val stats-total">$${totalCost.toFixed(4)}</td>
+    </tr>
+    </tbody></table>`
+}
+
+// ── Task detail modal ─────────────────────────────────────────────────────────
+async function openTaskDetail(id){
+  const modal=document.getElementById('task-modal')
+  const body=document.getElementById('modal-body')
+  const title=document.getElementById('modal-title')
+  modal.style.display='block'
+  body.innerHTML='<div class="no-data">Loading…</div>'
+  try{
+    const r=await fetch(`/api/tasks/${encodeURIComponent(id)}`)
+    if(!r.ok){body.innerHTML='<div class="no-data">Task not found</div>';return}
+    const t=await r.json()
+    title.textContent=t.title
+    const criteria=t.acceptance_criteria?.length
+      ?`<ul class="criteria-list">${t.acceptance_criteria.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>`
+      :'<span class="no-data">None</span>'
+    const hist=t.conversation_history?.length
+      ?t.conversation_history.map(m=>`<div class="history-msg">
+          <div class="msg-role">${esc(m.role)}</div>
+          <pre>${esc(m.content.slice(0,2000)+(m.content.length>2000?'\n…(truncated)':''))}</pre>
+        </div>`).join('')
+      :'<div class="no-data">No conversation history</div>'
+    const execs=t.execution_results?.length
+      ?t.execution_results.slice(-3).map(e=>`<div class="exec-result">
+          <div style="font-weight:700;color:${e.exit_code===0?'var(--green)':'var(--red)'}">Exit ${e.exit_code}</div>
+          ${e.stdout?`<pre>${esc(e.stdout.slice(-1000))}</pre>`:''}
+          ${e.stderr?`<pre style="color:var(--red)">${esc(e.stderr.slice(-500))}</pre>`:''}
+        </div>`).join('')
+      :'<div class="no-data">No executions</div>'
+    const depBadges=t.depends_on?.length
+      ?t.depends_on.map(d=>`<span class="mono" style="margin-right:6px;font-size:11px">${esc(d.slice(0,8))}</span>`).join('')
+      :'none'
+    body.innerHTML=`
+      <div class="modal-section">
+        ${statusTag(t.status)}
+        <span class="role-pill" style="margin-left:6px">${esc(t.assigned_role)}</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:8px">retries: ${t.retry_count??0} · ${ago(t.updated_at)}</span>
+      </div>
+      <div class="modal-section">
+        <h4>Description</h4>
+        <div style="font-size:13px;color:var(--text)">${esc(t.description)}</div>
+      </div>
+      <div class="modal-section">
+        <h4>Acceptance Criteria</h4>${criteria}
+      </div>
+      <div class="modal-section">
+        <h4>Dependencies</h4><div style="font-size:12px">${depBadges}</div>
+      </div>
+      <div class="modal-section">
+        <h4>Conversation History (${t.conversation_history?.length??0} messages)</h4>${hist}
+      </div>
+      <div class="modal-section">
+        <h4>Recent Execution Results</h4>${execs}
+      </div>`
+  }catch(e){
+    body.innerHTML=`<div class="no-data">Error: ${esc(String(e))}</div>`
+  }
+}
+function closeModal(){
+  document.getElementById('task-modal').style.display='none'
+}
+document.getElementById('task-modal').addEventListener('click',e=>{
+  if(e.target===document.getElementById('task-modal')) closeModal()
+})
+
+// ── Refresh loop ─────────────────────────────────────────────────────────────
+async function refresh(){
+  await Promise.all([fetchStatus(),fetchTasks(),fetchReleases(),fetchStats()])
+  document.getElementById('refresh-ts').textContent='Updated '+new Date().toLocaleTimeString()
+}
+
+refresh()
+initEvents()
+setInterval(refresh,5000)
+</script>
+</body>
+</html>

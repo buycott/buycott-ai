@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buycott-pipeline
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: buycott
+    app.kubernetes.io/component: pipeline
+spec:
+  # Must be 1 — the pipeline holds in-memory state and the SQLite DB is
+  # ReadWriteOnce. Use Recreate strategy so old pods terminate before new
+  # ones start (no split-brain on the DB file).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buycott-pipeline
+  template:
+    metadata:
+      labels:
+        app: buycott-pipeline
+        app.kubernetes.io/name: buycott
+        app.kubernetes.io/component: pipeline
+    spec:
+      serviceAccountName: buycott
+      containers:
+        - name: pipeline
+          image: {{IMAGE}}
+          imagePullPolicy: IfNotPresent
+          command:
+            - buycott
+            - start
+            - --config
+            - /etc/buycott/config.yaml
+            - --no-dashboard
+            - "{{BUYCOTT_DIRECTION}}"
+          ports:
+            - name: grpc
+              containerPort: {{API_PORT}}
+              protocol: TCP
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buycott-api-keys
+                  key: anthropic-api-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buycott-api-keys
+                  key: openai-api-key
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: buycott-api-keys
+                  key: gemini-api-key
+          resources:
+            requests:
+              cpu: {{PIPELINE_CPU_REQUEST}}
+              memory: {{PIPELINE_MEMORY_REQUEST}}
+            limits:
+              cpu: {{PIPELINE_CPU_LIMIT}}
+              memory: {{PIPELINE_MEMORY_LIMIT}}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/buycott/config.yaml
+              subPath: config.yaml
+            - name: artifacts
+              mountPath: /artifacts
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+          livenessProbe:
+            exec:
+              command: ["buycott", "status", "--config", "/etc/buycott/config.yaml"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: buycott-config
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: buycott-artifacts
+        # Docker socket forwarding — agents run as sibling containers on the
+        # host, not inside the pod. Requires the node to have Docker installed.
+        # For clusters without Docker (e.g., containerd-only), replace this
+        # with a DinD sidecar or a Tekton/Argo task runner.
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buycott-pipeline
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: buycott
+    app.kubernetes.io/component: pipeline
+spec:
+  selector:
+    app: buycott-pipeline
+  ports:
+    - name: grpc
+      port: {{API_PORT}}
+      targetPort: {{API_PORT}}
+      protocol: TCP
+  type: ClusterIP

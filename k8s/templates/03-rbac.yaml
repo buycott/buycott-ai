@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: buycott
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: buycott
+# Buycott does not interact with the Kubernetes API, so no Role or RoleBinding is needed.
+# The ServiceAccount is created for completeness and future extensibility.

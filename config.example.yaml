@@ -1,0 +1,66 @@
+project:
+  name: "My Project"
+  artifacts_path: /artifacts
+
+roles:
+  pm:
+    provider: anthropic
+    model: claude-opus-4-8
+
+  backend:
+    provider: anthropic
+    model: claude-sonnet-4-6
+
+  frontend:
+    provider: anthropic
+    model: claude-sonnet-4-6
+
+  copywriter:
+    provider: anthropic
+    model: claude-haiku-4-5-20251001
+
+  # Code reviewer — reviews engineer output before PM review.
+  # Engineers must implement all change requests before proceeding.
+  # Remove this role to disable the code review gate.
+  reviewer:
+    provider: anthropic
+    model: claude-sonnet-4-6
+
+  # Each role loads its prompt from {prompts_dir}/{role}.md by default.
+  # Override for a specific role with either:
+  #   system_prompt_file: /path/to/custom-backend.md
+  #   system_prompt: |
+  #     Inline prompt text here (takes priority over file).
+
+  # Example: custom role pointing to its own prompt file
+  # devops:
+  #   provider: openai
+  #   model: gpt-4o
+  #   system_prompt_file: /etc/buycott/prompts/devops.md
+
+execution:
+  max_retries: 10
+  task_timeout: 5m
+  docker_socket: /var/run/docker.sock
+  # Directory scanned for role prompt files. Default: /etc/buycott/prompts
+  # Convention: {prompts_dir}/{role_name}.md — so "backend" loads backend.md, etc.
+  # prompts_dir: /etc/buycott/prompts
+
+  # Ask the PM to assess release readiness every N completed tasks. Default: 10.
+  # Set to 0 to disable automatic release checks.
+  # release_check_interval: 10
+
+# gRPC control API (used by CLI --server flag and buycott chat).
+# Default: 8080
+api:
+  port: 8080
+
+# Web dashboard served at http://localhost:<port>.
+# Default: 8000
+dashboard:
+  port: 8000
+
+api_keys:
+  anthropic: ${ANTHROPIC_API_KEY}
+  openai: ${OPENAI_API_KEY}
+  gemini: ${GEMINI_API_KEY}
