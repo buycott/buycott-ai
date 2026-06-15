@@ -15,6 +15,40 @@
 
 ---
 
+## Table of Contents
+
+- [Mission Statement](#mission-statement)
+- [What is Buycott?](#what-is-buycott)
+- [How it works](#how-it-works)
+- [Quick start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [1. Clone and configure](#1-clone-and-configure)
+  - [2. Run](#2-run)
+  - [3. Watch it work](#3-watch-it-work)
+  - [4. Dashboard](#4-dashboard)
+- [Deployment](#deployment)
+  - [Docker Compose](#docker-compose--recommended-for-single-host)
+  - [Kubernetes](#kubernetes)
+- [Configuration](#configuration)
+  - [Supported providers](#supported-providers)
+- [Role system](#role-system)
+  - [System prompts](#system-prompts)
+  - [Engineer output format](#engineer-output-format)
+  - [Adding a custom role](#adding-a-custom-role)
+- [CLI reference](#cli-reference)
+  - [Pipeline control](#pipeline-control)
+  - [Inspection](#inspection)
+  - [Conversation logs](#conversation-logs)
+  - [Interactive chat](#interactive-chat)
+  - [Dashboard (standalone)](#dashboard-standalone)
+  - [Remote mode](#remote-mode)
+- [Releases](#releases)
+- [Task lifecycle](#task-lifecycle)
+- [Architecture](#architecture)
+- [Development](#development)
+
+---
+
 ## Mission Statement
 
 The purpose of this project is not a Luddistic rejection of AI. It's an interesting technology with some useful applications in domains and cases where accuracy, quality, maintainability, and accountability don't matter all that much. It is a rejection of the labs, hyperscalers, investment bankers, private equity firms, and the captive media industry that has driven a three+ year hype cycle that has done significant damage to the tech ecosystem, the economy, international relations, and the lives of people and communities that have been sacrificed on a pyre of money to a false god.
