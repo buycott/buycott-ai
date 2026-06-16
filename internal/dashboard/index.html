@@ -52,8 +52,8 @@ header{
 .view.active{display:block}
 
 /* ── Stats ──────────────────────────────────────────────── */
-.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
-@media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px}
+@media(max-width:1100px){.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:520px){.stats{grid-template-columns:repeat(2,1fr)}}
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
 .stat-val{font-size:30px;font-weight:700;color:var(--bright);line-height:1;margin-bottom:3px}
@@ -63,6 +63,9 @@ header{
 .stat.done .stat-val{color:var(--green)}
 .stat.esc  .stat-val{color:var(--red)}
 .stat.rel  .stat-val{color:var(--purple)}
+.stat.burn .stat-val{color:var(--red);font-size:22px}
+.stat.burn{border-color:rgba(248,81,73,.3);background:rgba(248,81,73,.04)}
+.stat-sub{font-size:10px;color:var(--muted);margin-top:4px;font-family:monospace}
 
 /* ── Content grid ───────────────────────────────────────── */
 .grid{display:grid;grid-template-columns:1fr 360px;gap:16px;margin-bottom:16px}
@@ -274,6 +277,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="stat done"><div class="stat-val" id="s-done">—</div><div class="stat-lbl">Completed</div></div>
     <div class="stat esc"> <div class="stat-val" id="s-esc">—</div> <div class="stat-lbl">Escalated</div></div>
     <div class="stat rel"> <div class="stat-val" id="s-rel">—</div> <div class="stat-lbl">Releases</div></div>
+    <div class="stat burn">
+      <div class="stat-val" id="s-burn">—</div>
+      <div class="stat-lbl">Provider Burn Est.</div>
+      <div class="stat-sub" id="s-burn-range"></div>
+    </div>
   </div>
 
   <!-- Rate-limit banner (hidden when none) -->
@@ -321,7 +329,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <div class="card" style="margin-top:16px">
     <div class="card-head">
       <span class="card-title">Token Usage</span>
-      <span class="hint">estimated cost · refreshes with status</span>
+      <span class="hint">your cost · provider absorbs ~3–20× · refreshes with status</span>
     </div>
     <div id="stats-body"><div class="no-data">Loading…</div></div>
   </div>
@@ -677,8 +685,22 @@ function renderStats(rows){
   // Aggregate totals
   let totalIn=0,totalOut=0,totalCost=0,totalCalls=0
   rows.forEach(r=>{totalIn+=r.input_tokens;totalOut+=r.output_tokens;totalCost+=r.est_cost_usd;totalCalls+=r.calls})
+  // Update provider burn stat card
+  const burnEl=document.getElementById('s-burn')
+  const burnRangeEl=document.getElementById('s-burn-range')
+  if(burnEl){
+    if(totalCost>0){
+      burnEl.textContent='~$'+(totalCost*10).toFixed(2)
+      if(burnRangeEl) burnRangeEl.textContent=`$${(totalCost*3).toFixed(2)}–$${(totalCost*20).toFixed(2)} range`
+    }else{
+      burnEl.textContent='—'
+      if(burnRangeEl) burnRangeEl.textContent=''
+    }
+  }
+  const burnLow=(totalCost*3).toFixed(2)
+  const burnHigh=(totalCost*20).toFixed(2)
   el.innerHTML=`<table class="stats-table">
-    <thead><tr><th>Role</th><th>Model</th><th>Calls</th><th>Input tok</th><th>Output tok</th><th>Est. cost</th></tr></thead>
+    <thead><tr><th>Role</th><th>Model</th><th>Calls</th><th>Input tok</th><th>Output tok</th><th>Your cost</th></tr></thead>
     <tbody>
     ${rows.map(r=>`<tr>
       <td><span class="mono">${esc(r.role)}</span></td>
@@ -694,6 +716,12 @@ function renderStats(rows){
       <td class="stats-total">${totalIn.toLocaleString()}</td>
       <td class="stats-total">${totalOut.toLocaleString()}</td>
       <td class="cost-val stats-total">$${totalCost.toFixed(4)}</td>
+    </tr>
+    <tr style="border-top:1px solid rgba(248,81,73,.2);background:rgba(248,81,73,.03)">
+      <td colspan="5" style="color:var(--red);font-size:11px;font-weight:600">
+        Provider burn est. (3–20× subsidy)
+      </td>
+      <td style="color:var(--red);font-weight:700;font-size:12px">$${burnLow}–$${burnHigh}</td>
     </tr>
     </tbody></table>`
 }
