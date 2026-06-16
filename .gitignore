@@ -52,10 +52,8 @@ desktop.ini
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
-<<<<<<< Updated upstream
-=======
 
 # ── Private planning docs ─────────────────────────────────────────────────────
 MARKETING.md
 marketing/
->>>>>>> Stashed changes
+
