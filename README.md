@@ -46,6 +46,7 @@
 - [Task lifecycle](#task-lifecycle)
 - [Architecture](#architecture)
 - [Development](#development)
+- [Contributing](#contributing)
 
 ---
 
@@ -562,3 +563,20 @@ make run DIRECTION="Build something"
 > `GOTOOLCHAIN=auto` is required — `go.mod` specifies Go 1.25 (pulled up by transitive Docker SDK → OpenTelemetry dependencies) but your local toolchain may be older. The flag downloads the right version automatically.
 
 See [`CLAUDE.md`](CLAUDE.md) for codebase conventions.
+
+---
+
+## Contributing
+
+Bug fixes, new LLM providers, new built-in roles, and documentation improvements are all welcome.
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
+- Dev environment setup
+- Package dependency rules (no circular imports)
+- How to add a new LLM provider
+- How to add a new built-in role
+- Database migration conventions
+- Test patterns and conventions
+- PR checklist
+
+For security vulnerabilities, please report privately rather than opening a public issue.
