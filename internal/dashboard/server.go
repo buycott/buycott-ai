@@ -32,6 +32,21 @@ func Listen(srv server.Server, port int) error {
 		writeJSON(w, st)
 	})
 
+	// Clear the current run and start over. Query params:
+	//   wipe_artifacts=1  also delete generated project files
+	//   restart=1         relaunch the pipeline from the original direction
+	mux.HandleFunc("POST /api/reset", func(w http.ResponseWriter, r *http.Request) {
+		opts := server.ResetOptions{
+			WipeArtifacts: r.URL.Query().Get("wipe_artifacts") == "1",
+			Restart:       r.URL.Query().Get("restart") == "1",
+		}
+		if err := srv.Reset(r.Context(), opts); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	})
+
 	mux.HandleFunc("GET /api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		var filter model.TaskFilter
 		if s := r.URL.Query().Get("status"); s != "" {

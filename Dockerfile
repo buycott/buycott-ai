@@ -11,13 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         docker.io \
     && rm -rf /var/lib/apt/lists/*
 
-# Optional: to use the `claude-code` provider (run roles on a Claude
-# subscription), the `claude` CLI must be on PATH. Uncomment to bundle it:
+# Optional: the CLI/subscription providers (claude-code, codex, gemini-cli) each
+# need their CLI on PATH. They're Node packages — uncomment the ones you use:
 #   RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
-#       && npm install -g @anthropic-ai/claude-code \
+#       && npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli \
 #       && rm -rf /var/lib/apt/lists/*
-# Then authenticate non-interactively by passing CLAUDE_CODE_OAUTH_TOKEN
-# (from `claude setup-token`) into the container's environment.
+# Each authenticates via its own login (subscription), not an API key:
+#   claude-code — pass CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`)
+#   codex       — run `codex login` (credentials persist under ~/.codex)
+#   gemini-cli  — run `gemini` once to log in (credentials persist under ~/.gemini)
+# Persist the relevant home dirs (volume mount) so logins survive restarts.
 
 COPY --from=builder /buycott-bin /usr/local/bin/buycott
 COPY prompts/ /etc/buycott/prompts/

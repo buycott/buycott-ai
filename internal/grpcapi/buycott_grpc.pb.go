@@ -19,19 +19,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BuycottService_GetStatus_FullMethodName     = "/buycott.v1.BuycottService/GetStatus"
-	BuycottService_Pause_FullMethodName         = "/buycott.v1.BuycottService/Pause"
-	BuycottService_Resume_FullMethodName        = "/buycott.v1.BuycottService/Resume"
-	BuycottService_ListTasks_FullMethodName     = "/buycott.v1.BuycottService/ListTasks"
-	BuycottService_GetTask_FullMethodName       = "/buycott.v1.BuycottService/GetTask"
-	BuycottService_ListEvents_FullMethodName    = "/buycott.v1.BuycottService/ListEvents"
-	BuycottService_StreamEvents_FullMethodName  = "/buycott.v1.BuycottService/StreamEvents"
-	BuycottService_ListReleases_FullMethodName  = "/buycott.v1.BuycottService/ListReleases"
-	BuycottService_ListArtifacts_FullMethodName = "/buycott.v1.BuycottService/ListArtifacts"
-	BuycottService_Chat_FullMethodName          = "/buycott.v1.BuycottService/Chat"
+	BuycottService_GetStatus_FullMethodName         = "/buycott.v1.BuycottService/GetStatus"
+	BuycottService_Pause_FullMethodName             = "/buycott.v1.BuycottService/Pause"
+	BuycottService_Resume_FullMethodName            = "/buycott.v1.BuycottService/Resume"
+	BuycottService_ListTasks_FullMethodName         = "/buycott.v1.BuycottService/ListTasks"
+	BuycottService_GetTask_FullMethodName           = "/buycott.v1.BuycottService/GetTask"
+	BuycottService_ListEvents_FullMethodName        = "/buycott.v1.BuycottService/ListEvents"
+	BuycottService_StreamEvents_FullMethodName      = "/buycott.v1.BuycottService/StreamEvents"
+	BuycottService_ListReleases_FullMethodName      = "/buycott.v1.BuycottService/ListReleases"
+	BuycottService_TokenStats_FullMethodName        = "/buycott.v1.BuycottService/TokenStats"
+	BuycottService_ListConversations_FullMethodName = "/buycott.v1.BuycottService/ListConversations"
+	BuycottService_ListArtifacts_FullMethodName     = "/buycott.v1.BuycottService/ListArtifacts"
+	BuycottService_Chat_FullMethodName              = "/buycott.v1.BuycottService/Chat"
 )
 
-// BuycottServiceClient is the client API for MTPService service.
+// BuycottServiceClient is the client API for BuycottService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BuycottServiceClient interface {
@@ -47,6 +49,10 @@ type BuycottServiceClient interface {
 	StreamEvents(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventResponse], error)
 	// Releases
 	ListReleases(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListReleasesResponse, error)
+	// Token usage / cost stats (per role+model)
+	TokenStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*TokenStatsResponse, error)
+	// Conversation (LLM exchange) logs
+	ListConversations(ctx context.Context, in *ListConversationsRequest, opts ...grpc.CallOption) (*ListConversationsResponse, error)
 	// Artifacts
 	ListArtifacts(ctx context.Context, in *ListArtifactsRequest, opts ...grpc.CallOption) (*ListArtifactsResponse, error)
 	// Interactive chat with a running agent
@@ -55,15 +61,15 @@ type BuycottServiceClient interface {
 	Chat(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatChunk], error)
 }
 
-type mTPServiceClient struct {
+type buycottServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
 func NewBuycottServiceClient(cc grpc.ClientConnInterface) BuycottServiceClient {
-	return &mTPServiceClient{cc}
+	return &buycottServiceClient{cc}
 }
 
-func (c *mTPServiceClient) GetStatus(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*StatusResponse, error) {
+func (c *buycottServiceClient) GetStatus(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*StatusResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StatusResponse)
 	err := c.cc.Invoke(ctx, BuycottService_GetStatus_FullMethodName, in, out, cOpts...)
@@ -73,7 +79,7 @@ func (c *mTPServiceClient) GetStatus(ctx context.Context, in *Empty, opts ...grp
 	return out, nil
 }
 
-func (c *mTPServiceClient) Pause(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+func (c *buycottServiceClient) Pause(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Empty)
 	err := c.cc.Invoke(ctx, BuycottService_Pause_FullMethodName, in, out, cOpts...)
@@ -83,7 +89,7 @@ func (c *mTPServiceClient) Pause(ctx context.Context, in *Empty, opts ...grpc.Ca
 	return out, nil
 }
 
-func (c *mTPServiceClient) Resume(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+func (c *buycottServiceClient) Resume(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Empty)
 	err := c.cc.Invoke(ctx, BuycottService_Resume_FullMethodName, in, out, cOpts...)
@@ -93,7 +99,7 @@ func (c *mTPServiceClient) Resume(ctx context.Context, in *Empty, opts ...grpc.C
 	return out, nil
 }
 
-func (c *mTPServiceClient) ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error) {
+func (c *buycottServiceClient) ListTasks(ctx context.Context, in *ListTasksRequest, opts ...grpc.CallOption) (*ListTasksResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListTasksResponse)
 	err := c.cc.Invoke(ctx, BuycottService_ListTasks_FullMethodName, in, out, cOpts...)
@@ -103,7 +109,7 @@ func (c *mTPServiceClient) ListTasks(ctx context.Context, in *ListTasksRequest, 
 	return out, nil
 }
 
-func (c *mTPServiceClient) GetTask(ctx context.Context, in *GetTaskRequest, opts ...grpc.CallOption) (*TaskResponse, error) {
+func (c *buycottServiceClient) GetTask(ctx context.Context, in *GetTaskRequest, opts ...grpc.CallOption) (*TaskResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TaskResponse)
 	err := c.cc.Invoke(ctx, BuycottService_GetTask_FullMethodName, in, out, cOpts...)
@@ -113,7 +119,7 @@ func (c *mTPServiceClient) GetTask(ctx context.Context, in *GetTaskRequest, opts
 	return out, nil
 }
 
-func (c *mTPServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error) {
+func (c *buycottServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListEventsResponse)
 	err := c.cc.Invoke(ctx, BuycottService_ListEvents_FullMethodName, in, out, cOpts...)
@@ -123,7 +129,7 @@ func (c *mTPServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest
 	return out, nil
 }
 
-func (c *mTPServiceClient) StreamEvents(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventResponse], error) {
+func (c *buycottServiceClient) StreamEvents(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &BuycottService_ServiceDesc.Streams[0], BuycottService_StreamEvents_FullMethodName, cOpts...)
 	if err != nil {
@@ -142,7 +148,7 @@ func (c *mTPServiceClient) StreamEvents(ctx context.Context, in *Empty, opts ...
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BuycottService_StreamEventsClient = grpc.ServerStreamingClient[EventResponse]
 
-func (c *mTPServiceClient) ListReleases(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListReleasesResponse, error) {
+func (c *buycottServiceClient) ListReleases(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListReleasesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListReleasesResponse)
 	err := c.cc.Invoke(ctx, BuycottService_ListReleases_FullMethodName, in, out, cOpts...)
@@ -152,7 +158,27 @@ func (c *mTPServiceClient) ListReleases(ctx context.Context, in *Empty, opts ...
 	return out, nil
 }
 
-func (c *mTPServiceClient) ListArtifacts(ctx context.Context, in *ListArtifactsRequest, opts ...grpc.CallOption) (*ListArtifactsResponse, error) {
+func (c *buycottServiceClient) TokenStats(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*TokenStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TokenStatsResponse)
+	err := c.cc.Invoke(ctx, BuycottService_TokenStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *buycottServiceClient) ListConversations(ctx context.Context, in *ListConversationsRequest, opts ...grpc.CallOption) (*ListConversationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListConversationsResponse)
+	err := c.cc.Invoke(ctx, BuycottService_ListConversations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *buycottServiceClient) ListArtifacts(ctx context.Context, in *ListArtifactsRequest, opts ...grpc.CallOption) (*ListArtifactsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListArtifactsResponse)
 	err := c.cc.Invoke(ctx, BuycottService_ListArtifacts_FullMethodName, in, out, cOpts...)
@@ -162,7 +188,7 @@ func (c *mTPServiceClient) ListArtifacts(ctx context.Context, in *ListArtifactsR
 	return out, nil
 }
 
-func (c *mTPServiceClient) Chat(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatChunk], error) {
+func (c *buycottServiceClient) Chat(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatChunk], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &BuycottService_ServiceDesc.Streams[1], BuycottService_Chat_FullMethodName, cOpts...)
 	if err != nil {
@@ -181,7 +207,7 @@ func (c *mTPServiceClient) Chat(ctx context.Context, in *ChatRequest, opts ...gr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BuycottService_ChatClient = grpc.ServerStreamingClient[ChatChunk]
 
-// BuycottServiceServer is the server API for MTPService service.
+// BuycottServiceServer is the server API for BuycottService service.
 // All implementations must embed UnimplementedBuycottServiceServer
 // for forward compatibility.
 type BuycottServiceServer interface {
@@ -197,6 +223,10 @@ type BuycottServiceServer interface {
 	StreamEvents(*Empty, grpc.ServerStreamingServer[EventResponse]) error
 	// Releases
 	ListReleases(context.Context, *Empty) (*ListReleasesResponse, error)
+	// Token usage / cost stats (per role+model)
+	TokenStats(context.Context, *Empty) (*TokenStatsResponse, error)
+	// Conversation (LLM exchange) logs
+	ListConversations(context.Context, *ListConversationsRequest) (*ListConversationsResponse, error)
 	// Artifacts
 	ListArtifacts(context.Context, *ListArtifactsRequest) (*ListArtifactsResponse, error)
 	// Interactive chat with a running agent
@@ -237,6 +267,12 @@ func (UnimplementedBuycottServiceServer) StreamEvents(*Empty, grpc.ServerStreami
 func (UnimplementedBuycottServiceServer) ListReleases(context.Context, *Empty) (*ListReleasesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListReleases not implemented")
 }
+func (UnimplementedBuycottServiceServer) TokenStats(context.Context, *Empty) (*TokenStatsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TokenStats not implemented")
+}
+func (UnimplementedBuycottServiceServer) ListConversations(context.Context, *ListConversationsRequest) (*ListConversationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListConversations not implemented")
+}
 func (UnimplementedBuycottServiceServer) ListArtifacts(context.Context, *ListArtifactsRequest) (*ListArtifactsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListArtifacts not implemented")
 }
@@ -244,7 +280,7 @@ func (UnimplementedBuycottServiceServer) Chat(*ChatRequest, grpc.ServerStreaming
 	return status.Errorf(codes.Unimplemented, "method Chat not implemented")
 }
 func (UnimplementedBuycottServiceServer) mustEmbedUnimplementedBuycottServiceServer() {}
-func (UnimplementedBuycottServiceServer) testEmbeddedByValue()                    {}
+func (UnimplementedBuycottServiceServer) testEmbeddedByValue()                        {}
 
 // UnsafeBuycottServiceServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to BuycottServiceServer will
@@ -401,6 +437,42 @@ func _BuycottService_ListReleases_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BuycottService_TokenStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BuycottServiceServer).TokenStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BuycottService_TokenStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BuycottServiceServer).TokenStats(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BuycottService_ListConversations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListConversationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BuycottServiceServer).ListConversations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BuycottService_ListConversations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BuycottServiceServer).ListConversations(ctx, req.(*ListConversationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BuycottService_ListArtifacts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListArtifactsRequest)
 	if err := dec(in); err != nil {
@@ -430,7 +502,7 @@ func _BuycottService_Chat_Handler(srv interface{}, stream grpc.ServerStream) err
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BuycottService_ChatServer = grpc.ServerStreamingServer[ChatChunk]
 
-// BuycottService_ServiceDesc is the grpc.ServiceDesc for MTPService service.
+// BuycottService_ServiceDesc is the grpc.ServiceDesc for BuycottService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var BuycottService_ServiceDesc = grpc.ServiceDesc{
@@ -464,6 +536,14 @@ var BuycottService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListReleases",
 			Handler:    _BuycottService_ListReleases_Handler,
+		},
+		{
+			MethodName: "TokenStats",
+			Handler:    _BuycottService_TokenStats_Handler,
+		},
+		{
+			MethodName: "ListConversations",
+			Handler:    _BuycottService_ListConversations_Handler,
 		},
 		{
 			MethodName: "ListArtifacts",

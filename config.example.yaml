@@ -2,29 +2,51 @@ project:
   name: "My Project"
   artifacts_path: /artifacts
 
+# Each role picks a provider independently. Supported providers:
+#   API-key providers (metered, need the matching api_keys.* entry):
+#     anthropic   — Anthropic API
+#     openai      — OpenAI API
+#     gemini      — Google Gemini API
+#   CLI/subscription providers (no API key; the named CLI must be installed and
+#   logged in, and auth flows through the user's subscription, not an API key):
+#     claude-code — Claude subscription via the `claude` CLI (optional api_keys.claude_code token)
+#     codex       — ChatGPT subscription via the `codex` CLI  (`codex login`)
+#     gemini-cli  — Google account via the `gemini` CLI       (`gemini` login)
+# The mix below shows one of each — tune providers/models to taste. The CLI
+# providers shell out per call and hit subscription rate limits quickly, so they
+# suit low-volume / experimental runs more than an always-on autonomous loop.
 roles:
+  # anthropic — the PM benefits from the strongest model.
   pm:
     provider: anthropic
     model: claude-opus-4-8
 
+  # claude-code — run an engineer on your Claude subscription instead of a
+  # metered API key. Auth is handled by the `claude` CLI (see api_keys.claude_code).
   backend:
-    provider: anthropic
+    provider: claude-code
     model: claude-sonnet-4-6
 
+  # codex — run on a ChatGPT subscription via the `codex` CLI (`codex login`).
   frontend:
-    provider: anthropic
-    model: claude-sonnet-4-6
+    provider: codex
+    model: gpt-5-codex
 
+  # gemini-cli — run on a Google account via the `gemini` CLI (no API key).
   copywriter:
-    provider: anthropic
-    model: claude-haiku-4-5
+    provider: gemini-cli
+    model: gemini-2.5-flash
 
-  # Code reviewer — reviews engineer output before PM review.
-  # Engineers must implement all change requests before proceeding.
-  # Remove this role to disable the code review gate.
+  # openai — metered API example. Also the code review gate: the reviewer checks
+  # engineer output before PM review; remove this role to disable the gate.
   reviewer:
-    provider: anthropic
-    model: claude-sonnet-4-6
+    provider: openai
+    model: gpt-4o
+
+  # gemini — metered API example. Remove if you don't want a security gate.
+  # security:
+  #   provider: gemini
+  #   model: gemini-1.5-pro
 
   # Each role loads its prompt from {prompts_dir}/{role}.md by default.
   # Override for a specific role with either:
@@ -42,6 +64,13 @@ execution:
   max_retries: 10
   task_timeout: 5m
   docker_socket: /var/run/docker.sock
+  # Docker volume shared with ephemeral executor containers as /artifacts.
+  # Required under socket-forwarding (the default deployment): the host daemon
+  # resolves bind sources as host paths, so mounting artifacts_path directly
+  # fails with "bind source did not exist at container create time". Set this to
+  # the shared volume's name (Compose default: buycott_artifacts). Leave empty
+  # only when the daemon shares this container's filesystem.
+  artifacts_volume: buycott_artifacts
   # Directory scanned for role prompt files. Default: /etc/buycott/prompts
   # Convention: {prompts_dir}/{role_name}.md — so "backend" loads backend.md, etc.
   # prompts_dir: /etc/buycott/prompts
@@ -60,6 +89,7 @@ api:
 dashboard:
   port: 8000
 
+# Metered API providers read their key from here (env-var expansion supported).
 api_keys:
   anthropic: ${ANTHROPIC_API_KEY}
   openai: ${OPENAI_API_KEY}
@@ -71,3 +101,22 @@ api_keys:
   # throttle an autonomous multi-agent loop far sooner than an API key — best for
   # low-volume experimentation. Requires the `claude` CLI on PATH in the image.
   claude_code: ${CLAUDE_CODE_OAUTH_TOKEN}
+
+# ── CLI/subscription provider auth (codex, gemini-cli) ─────────────────────────
+# These two don't read a token from this file — the `codex` / `gemini` CLI owns
+# auth, and the provider strips the matching API-key env var so it uses the
+# subscription login rather than metered billing. Authenticate the CLI once and
+# persist its home dir (so logins survive container restarts):
+#
+#   codex       provider: run `codex login` (ChatGPT subscription).
+#               Credentials persist in ~/.codex/auth.json — mount/persist ~/.codex.
+#               (OPENAI_API_KEY is intentionally ignored by this provider.)
+#
+#   gemini-cli  provider: run `gemini` once and complete the Google login, or set
+#               GOOGLE_GENAI_USE_GCA=true for Code Assist / subscription auth.
+#               Credentials persist in ~/.gemini — mount/persist ~/.gemini.
+#               (GEMINI_API_KEY / GOOGLE_API_KEY are intentionally ignored here;
+#                use the `gemini` API provider above if you want key-based auth.)
+#
+# Override the binary location per provider if it isn't on PATH:
+#   CLAUDE_CODE_BIN, CODEX_BIN, GEMINI_BIN environment variables.

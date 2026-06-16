@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"buycott/internal/model"
+	"github.com/google/uuid"
 )
 
 type LLMLogStore struct {

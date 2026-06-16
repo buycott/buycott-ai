@@ -15,7 +15,7 @@ import (
 
 func TestFireWebhooks_MatchingEventFires(t *testing.T) {
 	var (
-		mu      sync.Mutex
+		mu       sync.Mutex
 		received []map[string]any
 	)
 
@@ -103,8 +103,8 @@ func TestFireWebhooks_NonMatchingEventSkipped(t *testing.T) {
 
 func TestFireWebhooks_WildcardMatchesAll(t *testing.T) {
 	var (
-		mu      sync.Mutex
-		count   int
+		mu    sync.Mutex
+		count int
 	)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	stateKeyTasksSinceCheck   = "tasks_since_release_check"
+	stateKeyTasksSinceCheck    = "tasks_since_release_check"
 	stateKeyLastReleaseCheckAt = "last_release_check_at"
 )
 
@@ -64,7 +64,7 @@ func (p *Pipeline) performReleaseCheck(ctx context.Context) error {
 
 	// Build a compact summary of recently completed tasks for the PM.
 	type taskSummary struct {
-		Title       string `json:"title"`
+		Title        string `json:"title"`
 		AssignedRole string `json:"assigned_role"`
 	}
 	summaries := make([]taskSummary, 0, len(recentTasks))
@@ -81,9 +81,9 @@ func (p *Pipeline) performReleaseCheck(ctx context.Context) error {
 	}
 
 	projectState := map[string]any{
-		"direction":                 p.direction,
-		"current_version":           currentVersion,
-		"task_stats":                stats,
+		"direction":                  p.direction,
+		"current_version":            currentVersion,
+		"task_stats":                 stats,
 		"tasks_completed_this_cycle": summaries,
 	}
 

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"buycott/internal/model"
+	"github.com/spf13/cobra"
 )
 
 var inspectCmd = &cobra.Command{

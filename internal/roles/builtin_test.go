@@ -211,15 +211,15 @@ func TestParseTasks_ToolEnvelope(t *testing.T) {
 	resp := toolResp(t, map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"title":        "Add login",
-				"description":  "Create login endpoint",
+				"title":         "Add login",
+				"description":   "Create login endpoint",
 				"assigned_role": "backend",
 			},
 			map[string]any{
-				"title":        "Add tests",
-				"description":  "Write unit tests",
+				"title":         "Add tests",
+				"description":   "Write unit tests",
 				"assigned_role": "backend",
-				"depends_on":   []any{"will-be-replaced"},
+				"depends_on":    []any{"will-be-replaced"},
 			},
 		},
 	})
@@ -272,10 +272,10 @@ func TestParseTasks_DependsOnPropagated(t *testing.T) {
 	resp := toolResp(t, map[string]any{
 		"tasks": []any{
 			map[string]any{
-				"title":        "Task A",
-				"description":  "d",
+				"title":         "Task A",
+				"description":   "d",
 				"assigned_role": "backend",
-				"depends_on":   []any{"id-abc"},
+				"depends_on":    []any{"id-abc"},
 			},
 		},
 	})

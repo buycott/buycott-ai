@@ -6,16 +6,17 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"buycott/internal/config"
 	"buycott/internal/executor"
 	"buycott/internal/model"
 	"buycott/internal/roles"
 	"buycott/internal/state"
+	"github.com/google/uuid"
 )
 
 type Pipeline struct {
@@ -293,7 +294,7 @@ func (p *Pipeline) processTask(ctx context.Context, task *model.Task) error {
 		return p.handleFailure(ctx, task, fmt.Sprintf("role error: %v", err), model.ExecResult{ExitCode: -1})
 	}
 	task.ConversationHistory = append(task.ConversationHistory,
-		model.Message{Role: "assistant", Content: output.Narrative},
+		model.Message{Role: "assistant", Content: assistantTurn(output)},
 	)
 
 	// ── Sub-task spawning ─────────────────────────────────────────────────
@@ -362,7 +363,7 @@ func (p *Pipeline) processTask(ctx context.Context, task *model.Task) error {
 				return p.handleFailure(ctx, task, fmt.Sprintf("role error after code review: %v", err), model.ExecResult{ExitCode: -1})
 			}
 			task.ConversationHistory = append(task.ConversationHistory,
-				model.Message{Role: "assistant", Content: output.Narrative},
+				model.Message{Role: "assistant", Content: assistantTurn(output)},
 			)
 			written, err = roles.WriteFiles(output, p.artifacts)
 			if err != nil {
@@ -430,7 +431,7 @@ func (p *Pipeline) processTask(ctx context.Context, task *model.Task) error {
 				return p.handleFailure(ctx, task, fmt.Sprintf("role error after security review: %v", err), model.ExecResult{ExitCode: -1})
 			}
 			task.ConversationHistory = append(task.ConversationHistory,
-				model.Message{Role: "assistant", Content: output.Narrative},
+				model.Message{Role: "assistant", Content: assistantTurn(output)},
 			)
 			written, err = roles.WriteFiles(output, p.artifacts)
 			if err != nil {
@@ -586,6 +587,27 @@ func lastAssistantMessage(history []model.Message) string {
 		}
 	}
 	return "(no output)"
+}
+
+// assistantTurn renders an engineer's output as a non-empty conversation-history
+// message. An agent may submit work entirely via files with an empty narrative;
+// persisting that empty string and replaying it on the next attempt makes the
+// Anthropic API reject the request ("text content blocks must be non-empty").
+// When the narrative is blank we synthesize a short summary of what was produced.
+func assistantTurn(output roles.TaskOutput) string {
+	if strings.TrimSpace(output.Narrative) != "" {
+		return output.Narrative
+	}
+	if len(output.Files) > 0 {
+		names := make([]string, 0, len(output.Files))
+		for name := range output.Files {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return fmt.Sprintf("(No narrative provided. Submitted %d file(s): %s)",
+			len(names), strings.Join(names, ", "))
+	}
+	return "(No output produced.)"
 }
 
 func (p *Pipeline) handleFailure(ctx context.Context, task *model.Task, errMsg string, result model.ExecResult) error {

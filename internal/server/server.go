@@ -26,11 +26,25 @@ type Status struct {
 	RateLimited []RateLimitInfo `json:"rate_limited,omitempty"`
 }
 
+// ResetOptions controls how a run is torn down and restarted.
+type ResetOptions struct {
+	// WipeArtifacts also deletes all generated project files under the artifacts
+	// directory (the .buycott state dir is preserved).
+	WipeArtifacts bool
+	// Restart re-launches the pipeline from the original product direction after
+	// clearing state, so it regenerates tasks from scratch.
+	Restart bool
+}
+
 type Server interface {
 	Start(ctx context.Context, direction string) error
 	Stop() error
 	Pause() error
 	Resume() error
+	// Reset stops the pipeline (if running), clears all run state — tasks,
+	// events, releases, LLM logs and counters — and optionally wipes generated
+	// artifacts and/or restarts the run from scratch.
+	Reset(ctx context.Context, opts ResetOptions) error
 	GetStatus() (Status, error)
 	GetTask(id string) (*model.Task, error)
 	ListTasks(filter model.TaskFilter) ([]*model.Task, error)

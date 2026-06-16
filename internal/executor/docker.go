@@ -8,19 +8,24 @@ import (
 	"strings"
 	"time"
 
+	"buycott/internal/model"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
-	"buycott/internal/model"
 )
 
 type DockerExecutor struct {
 	cli          *client.Client
 	dockerSocket string
+	// artifactsVolume, when set, is mounted as a named Docker volume into
+	// ephemeral containers instead of bind-mounting the artifacts path. This is
+	// required under socket-forwarding, where the host daemon would otherwise
+	// resolve a bind source as a host path that doesn't exist inside the daemon.
+	artifactsVolume string
 }
 
-func NewDockerExecutor(dockerSocket string) (*DockerExecutor, error) {
+func NewDockerExecutor(dockerSocket, artifactsVolume string) (*DockerExecutor, error) {
 	cli, err := client.NewClientWithOpts(
 		client.WithHost("unix://"+dockerSocket),
 		client.WithAPIVersionNegotiation(),
@@ -28,7 +33,7 @@ func NewDockerExecutor(dockerSocket string) (*DockerExecutor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	return &DockerExecutor{cli: cli, dockerSocket: dockerSocket}, nil
+	return &DockerExecutor{cli: cli, dockerSocket: dockerSocket, artifactsVolume: artifactsVolume}, nil
 }
 
 func (e *DockerExecutor) Run(ctx context.Context, img string, commands []string, artifactsPath string) (model.ExecResult, error) {
@@ -43,6 +48,22 @@ func (e *DockerExecutor) Run(ctx context.Context, img string, commands []string,
 
 	script := strings.Join(commands, "\n")
 
+	// Choose how to share /artifacts with the ephemeral container. Under
+	// socket-forwarding the host daemon interprets bind sources as host paths,
+	// so a named volume is used when configured; otherwise we bind the path.
+	artifactsMount := mount.Mount{
+		Type:   mount.TypeBind,
+		Source: artifactsPath,
+		Target: "/artifacts",
+	}
+	if e.artifactsVolume != "" {
+		artifactsMount = mount.Mount{
+			Type:   mount.TypeVolume,
+			Source: e.artifactsVolume,
+			Target: "/artifacts",
+		}
+	}
+
 	resp, err := e.cli.ContainerCreate(ctx,
 		&container.Config{
 			Image: img,
@@ -50,11 +71,7 @@ func (e *DockerExecutor) Run(ctx context.Context, img string, commands []string,
 		},
 		&container.HostConfig{
 			Mounts: []mount.Mount{
-				{
-					Type:   mount.TypeBind,
-					Source: artifactsPath,
-					Target: "/artifacts",
-				},
+				artifactsMount,
 				{
 					Type:   mount.TypeBind,
 					Source: e.dockerSocket,

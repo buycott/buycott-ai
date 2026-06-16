@@ -23,11 +23,12 @@ type mockServer struct {
 	stats    []state.RoleTokenStats
 }
 
-func (m *mockServer) Start(_ context.Context, _ string) error { return nil }
-func (m *mockServer) Stop() error                             { return nil }
-func (m *mockServer) Pause() error                            { return nil }
-func (m *mockServer) Resume() error                           { return nil }
-func (m *mockServer) GetStatus() (server.Status, error)       { return server.Status{Running: true}, nil }
+func (m *mockServer) Start(_ context.Context, _ string) error              { return nil }
+func (m *mockServer) Stop() error                                          { return nil }
+func (m *mockServer) Reset(_ context.Context, _ server.ResetOptions) error { return nil }
+func (m *mockServer) Pause() error                                         { return nil }
+func (m *mockServer) Resume() error                                        { return nil }
+func (m *mockServer) GetStatus() (server.Status, error)                    { return server.Status{Running: true}, nil }
 
 func (m *mockServer) GetTask(id string) (*model.Task, error) {
 	t, ok := m.tasks[id]

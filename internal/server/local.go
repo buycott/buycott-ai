@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"buycott/internal/config"
 	"buycott/internal/executor"
 	"buycott/internal/llm"
@@ -20,6 +19,7 @@ import (
 	"buycott/internal/pipeline"
 	"buycott/internal/roles"
 	"buycott/internal/state"
+	"github.com/google/uuid"
 )
 
 type rateLimitEntry struct {
@@ -29,16 +29,20 @@ type rateLimitEntry struct {
 }
 
 type LocalServer struct {
-	cfg      *config.Config
-	db       *sql.DB
-	mu       sync.Mutex
-	pipe     *pipeline.Pipeline
-	running  bool
-	cancel   context.CancelFunc
-	tasks    *state.TaskStore
-	events   *state.EventStore
-	releases *state.ReleaseStore
-	llmLogs  *state.LLMLogStore
+	cfg     *config.Config
+	db      *sql.DB
+	mu      sync.Mutex
+	pipe    *pipeline.Pipeline
+	running bool
+	cancel  context.CancelFunc
+	done    chan struct{} // closed when the running pipeline goroutine exits
+	// remembered across restarts (e.g. Reset) — set on the first Start.
+	direction string
+	baseCtx   context.Context
+	tasks     *state.TaskStore
+	events    *state.EventStore
+	releases  *state.ReleaseStore
+	llmLogs   *state.LLMLogStore
 	// populated by Start, used by Chat
 	registry  *roles.Registry
 	providers map[string]llm.Provider
@@ -71,6 +75,11 @@ func (s *LocalServer) Start(ctx context.Context, direction string) error {
 		return fmt.Errorf("pipeline already running")
 	}
 
+	// Remember how to re-launch this run (used by Reset --restart). The base
+	// context is the long-lived one from the caller, never a request context.
+	s.direction = direction
+	s.baseCtx = ctx
+
 	registry, pm, reviewer, securityReviewer, securityScanCmds, providers, err := s.buildRoles()
 	if err != nil {
 		return fmt.Errorf("build roles: %w", err)
@@ -78,7 +87,7 @@ func (s *LocalServer) Start(ctx context.Context, direction string) error {
 	s.registry = registry
 	s.providers = providers
 
-	exec, err := executor.NewDockerExecutor(s.cfg.Execution.DockerSocket)
+	exec, err := executor.NewDockerExecutor(s.cfg.Execution.DockerSocket, s.cfg.Execution.ArtifactsVolume)
 	if err != nil {
 		return fmt.Errorf("docker executor: %w", err)
 	}
@@ -97,6 +106,8 @@ func (s *LocalServer) Start(ctx context.Context, direction string) error {
 	pipeCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	s.running = true
+	done := make(chan struct{})
+	s.done = done
 
 	s.startWebhookNotifier(pipeCtx)
 
@@ -105,10 +116,63 @@ func (s *LocalServer) Start(ctx context.Context, direction string) error {
 			s.mu.Lock()
 			s.running = false
 			s.mu.Unlock()
+			close(done)
 		}()
 		_ = s.pipe.Run(pipeCtx)
 	}()
 
+	return nil
+}
+
+// stopAndWait cancels the running pipeline (if any) and blocks until its
+// goroutine has fully exited, so callers can safely mutate shared state.
+func (s *LocalServer) stopAndWait() {
+	s.mu.Lock()
+	if !s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.cancel()
+	done := s.done
+	s.mu.Unlock()
+	<-done
+}
+
+// Reset tears down the current run, clears all persisted state, and optionally
+// wipes generated artifacts and/or restarts the pipeline from scratch.
+func (s *LocalServer) Reset(ctx context.Context, opts ResetOptions) error {
+	s.stopAndWait()
+
+	if err := state.ClearAll(s.db); err != nil {
+		return fmt.Errorf("clear state: %w", err)
+	}
+
+	// Drop any lingering rate-limit markers from the old run.
+	s.rateLimitsMu.Lock()
+	s.rateLimits = make(map[string]rateLimitEntry)
+	s.rateLimitsMu.Unlock()
+
+	if opts.WipeArtifacts {
+		if err := state.WipeArtifacts(s.cfg.Project.ArtifactsPath); err != nil {
+			return fmt.Errorf("wipe artifacts: %w", err)
+		}
+	}
+
+	// First event of the fresh run.
+	_ = s.events.Append("pipeline.reset", map[string]any{
+		"wiped_artifacts": opts.WipeArtifacts,
+		"restarted":       opts.Restart,
+	})
+
+	if opts.Restart {
+		base := s.baseCtx
+		if base == nil {
+			base = ctx
+		}
+		if err := s.Start(base, s.direction); err != nil {
+			return fmt.Errorf("restart after reset: %w", err)
+		}
+	}
 	return nil
 }
 

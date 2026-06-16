@@ -46,6 +46,10 @@ header{
 .tab-btn.active{color:var(--bright);border-bottom-color:var(--indigo)}
 .header-right{margin-left:auto;display:flex;align-items:center;gap:12px;padding:10px 0}
 #refresh-ts{font-size:11px;color:var(--muted);white-space:nowrap}
+.btn-danger{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);
+  color:var(--red);border-radius:6px;padding:6px 12px;font:inherit;font-size:12px;
+  font-weight:600;cursor:pointer;white-space:nowrap}
+.btn-danger:hover{background:rgba(248,81,73,.2)}
 
 /* ── Layout ─────────────────────────────────────────────── */
 .view{display:none;padding:20px 24px;max-width:1600px;margin:0 auto}
@@ -271,6 +275,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
   <div class="header-right">
     <div id="refresh-ts"></div>
+    <button class="btn-danger" onclick="resetRun()" title="Clear all tasks/events/logs and start over">↺ Reset run</button>
   </div>
 </header>
 
@@ -820,6 +825,20 @@ function closeModal(){
 document.getElementById('task-modal').addEventListener('click',e=>{
   if(e.target===document.getElementById('task-modal')) closeModal()
 })
+
+// ── Reset run ────────────────────────────────────────────────────────────────
+async function resetRun(){
+  if(!confirm('Clear the current run?\n\nThis permanently deletes all tasks, events, releases and logs, then restarts the pipeline from scratch.'))return
+  const wipe=confirm('Also delete all generated artifact files?\n\nOK = wipe generated files too · Cancel = keep them')
+  const qs=`restart=1${wipe?'&wipe_artifacts=1':''}`
+  try{
+    const r=await fetch('/api/reset?'+qs,{method:'POST'})
+    if(!r.ok){alert('Reset failed: '+(await r.text()));return}
+    seenIds.clear()
+    document.getElementById('event-feed').innerHTML='<div class="no-data">Connecting to event stream…</div>'
+    await refresh()
+  }catch(e){alert('Reset failed: '+e)}
+}
 
 // ── Refresh loop ─────────────────────────────────────────────────────────────
 async function refresh(){

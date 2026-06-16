@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"buycott/internal/dashboard"
 	"buycott/internal/grpcserver"
+	"github.com/spf13/cobra"
 )
 
 var noDashboard bool

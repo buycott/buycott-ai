@@ -145,6 +145,54 @@ func (g *GRPCServer) ListReleases(ctx context.Context, _ *grpcapi.Empty) (*grpca
 	return resp, nil
 }
 
+// ---------- token stats ----------
+
+func (g *GRPCServer) TokenStats(ctx context.Context, _ *grpcapi.Empty) (*grpcapi.TokenStatsResponse, error) {
+	stats, err := g.srv.TokenStats()
+	if err != nil {
+		return nil, err
+	}
+	resp := &grpcapi.TokenStatsResponse{}
+	for _, s := range stats {
+		resp.Stats = append(resp.Stats, &grpcapi.RoleTokenStat{
+			Role:         s.Role,
+			Model:        s.Model,
+			InputTokens:  s.InputTokens,
+			OutputTokens: s.OutputTokens,
+			Calls:        s.Calls,
+			EstCostUsd:   s.EstCostUSD,
+		})
+	}
+	return resp, nil
+}
+
+// ---------- conversations ----------
+
+func (g *GRPCServer) ListConversations(ctx context.Context, req *grpcapi.ListConversationsRequest) (*grpcapi.ListConversationsResponse, error) {
+	logs, err := g.srv.ListConversations(req.TaskId, req.Role, int(req.Limit))
+	if err != nil {
+		return nil, err
+	}
+	resp := &grpcapi.ListConversationsResponse{}
+	for _, l := range logs {
+		msgsJSON, _ := json.Marshal(l.Messages)
+		resp.Logs = append(resp.Logs, &grpcapi.LLMLogResponse{
+			Id:            l.ID,
+			TaskId:        l.TaskID,
+			Role:          l.Role,
+			Model:         l.Model,
+			CallType:      l.CallType,
+			MessagesJson:  string(msgsJSON),
+			Response:      l.Response,
+			InputTokens:   int64(l.InputTokens),
+			OutputTokens:  int64(l.OutputTokens),
+			DurationMs:    l.DurationMs,
+			CreatedAtUnix: l.CreatedAt.Unix(),
+		})
+	}
+	return resp, nil
+}
+
 // ---------- artifacts ----------
 
 func (g *GRPCServer) ListArtifacts(ctx context.Context, req *grpcapi.ListArtifactsRequest) (*grpcapi.ListArtifactsResponse, error) {
@@ -204,18 +252,18 @@ func toProtoTask(t *model.Task) *grpcapi.Task {
 	histJSON, _ := json.Marshal(t.ConversationHistory)
 	execJSON, _ := json.Marshal(t.ExecutionResults)
 	return &grpcapi.Task{
-		Id:                     t.ID,
-		Title:                  t.Title,
-		Description:            t.Description,
-		AcceptanceCriteria:     t.AcceptanceCriteria,
-		AssignedRole:           t.AssignedRole,
-		Status:                 string(t.Status),
-		RetryCount:             int32(t.RetryCount),
-		ParentTaskId:           t.ParentTaskID,
-		CreatedAtUnix:          t.CreatedAt.Unix(),
-		UpdatedAtUnix:          t.UpdatedAt.Unix(),
+		Id:                      t.ID,
+		Title:                   t.Title,
+		Description:             t.Description,
+		AcceptanceCriteria:      t.AcceptanceCriteria,
+		AssignedRole:            t.AssignedRole,
+		Status:                  string(t.Status),
+		RetryCount:              int32(t.RetryCount),
+		ParentTaskId:            t.ParentTaskID,
+		CreatedAtUnix:           t.CreatedAt.Unix(),
+		UpdatedAtUnix:           t.UpdatedAt.Unix(),
 		ConversationHistoryJson: string(histJSON),
-		ExecutionResultsJson:   string(execJSON),
+		ExecutionResultsJson:    string(execJSON),
 	}
 }
 

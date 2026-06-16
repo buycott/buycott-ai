@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.25">
   <img src="https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker">
-  <img src="https://img.shields.io/badge/providers-Anthropic_·_OpenAI_·_Gemini-FF4500?style=flat-square" alt="LLM Providers">
+  <img src="https://img.shields.io/badge/providers-API_keys_+_subscriptions-FF4500?style=flat-square" alt="LLM Providers">
   <img src="https://img.shields.io/badge/human_intervention-none-black?style=flat-square" alt="Autonomous">
 </p>
 
@@ -72,7 +72,12 @@ Don't use this with your work accounts, that's not your money. Don't use it with
 
 Buycott is a **headless container** that runs an autonomous AI software development team. You give it a product direction in plain English. It handles the rest: decomposing work into tasks, writing and testing code, reviewing its own output, and cutting versioned releases — continuously, without you lifting a finger.
 
-It supports **Anthropic, OpenAI, and Gemini** out of the box. You can mix providers per role — e.g., a Claude PM, GPT-4o engineers, and a Gemini copywriter. Every prompt/response exchange is logged and inspectable. A live web dashboard streams the action in real time.
+It works two ways, and you can mix them per role:
+
+- **Metered API keys** — Anthropic, OpenAI, and Gemini, billed per token.
+- **Subscriptions** — drive a role through the `claude`, `codex`, or `gemini` CLI so it runs on a Claude / ChatGPT / Google plan you already pay for. This is the point: those plans are sold below cost, so putting idle subscription capacity to work burns the provider's money, not yours. See the [Mission Statement](#mission-statement).
+
+Mix freely — e.g., a Claude PM on API, a `codex`-subscription backend, and a `gemini`-subscription copywriter. Every prompt/response exchange is logged and inspectable, with per-role token and cost tracking. A live web dashboard streams the action in real time.
 
 The longer it runs, the more it burns. Point it at a hard problem and walk away.
 
@@ -122,15 +127,28 @@ You: "Build a CRM for auto stores"
 ### Prerequisites
 
 - Docker and Docker Compose v2
-- API key(s) for at least one provider (Anthropic, OpenAI, or Gemini)
+- Auth for at least one provider — either an API key (Anthropic, OpenAI, or Gemini) **or** a logged-in subscription CLI (`claude`, `codex`, or `gemini`)
 
 ### 1. Clone and configure
 
 ```bash
 git clone <this-repo>
 cd buycott
+make setup        # interactive wizard
+```
+
+`make setup` walks you through picking a provider and model for each role and
+handles the auth flow for each one — including the subscription CLI logins
+(`claude setup-token`, `codex login`, `gemini`) that are otherwise painful to run
+inside a headless container. It writes `config.yaml`, `.env`, and (when a
+subscription provider is selected) a `docker-compose.override.yml` that mounts
+your host CLI credentials into the container.
+
+Prefer to edit by hand? Copy the examples instead:
+
+```bash
 cp config.example.yaml config.yaml   # edit model/provider choices
-cp .env.example .env                 # add your API key(s)
+cp .env.example .env                 # add your API key(s) / tokens
 ```
 
 ### 2. Run
@@ -158,7 +176,7 @@ make compose-conversation   # recent prompt/response exchanges
 
 ### 4. Dashboard
 
-Open **http://localhost:8000** — live pipeline status, task list, event stream, releases, and full conversation logs, all updating in real time via SSE.
+Open **http://localhost:8000** — live pipeline status, task list, event stream, releases, per-role token usage / cost, and full conversation logs, all updating in real time via SSE. Click any event to expand its full payload. The **Reset run** button clears all state and starts over from scratch (see [`buycott reset`](#pipeline-control)).
 
 ---
 
@@ -187,13 +205,17 @@ make compose-conversation                 # recent conversation logs
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | — | Required if using Anthropic models |
-| `OPENAI_API_KEY` | — | Required if using OpenAI models |
-| `GEMINI_API_KEY` | — | Required if using Gemini models |
+| `ANTHROPIC_API_KEY` | — | Required if using `anthropic` (API) models |
+| `OPENAI_API_KEY` | — | Required if using `openai` (API) models |
+| `GEMINI_API_KEY` | — | Required if using `gemini` (API) models |
+| `CLAUDE_CODE_OAUTH_TOKEN` | — | Optional headless token for the `claude-code` provider (`claude setup-token`) |
 | `BUYCOTT_DIRECTION` | `Build a sample web application` | Initial product direction |
 | `BUYCOTT_API_PORT` | `8080` | Host port for the gRPC API |
 | `BUYCOTT_DASHBOARD_PORT` | `8000` | Host port for the web dashboard |
 | `ARTIFACTS_PATH` | `./artifacts` | Host path for the artifacts volume |
+
+> [!NOTE]
+> The subscription CLI providers (`codex`, `gemini-cli`) authenticate via the CLI's own login, not an env var. Run `make setup` to log in on the host and mount the credentials into the container, and uncomment the CLI install block in the `Dockerfile` so the image contains the `claude` / `codex` / `gemini` binaries. See [Supported providers](#supported-providers).
 
 ---
 
@@ -297,12 +319,12 @@ roles:
         cmd: semgrep --config=auto /artifacts
 
   frontend:
-    provider: openai
-    model: gpt-4o
+    provider: codex            # ChatGPT subscription via the `codex` CLI (no API key)
+    model: gpt-5-codex
 
   copywriter:
-    provider: gemini
-    model: gemini-1.5-pro
+    provider: gemini-cli       # Google subscription via the `gemini` CLI (no API key)
+    model: gemini-2.5-flash
 
   # Custom role — just needs a prompt file or inline prompt
   devops:
@@ -314,6 +336,7 @@ execution:
   max_retries: 10             # retries before a task escalates to the PM
   task_timeout: 5m
   docker_socket: /var/run/docker.sock
+  artifacts_volume: buycott_artifacts  # Docker volume shared with executor containers (see note)
   prompts_dir: /etc/buycott/prompts
   release_check_interval: 10  # ask PM about a release every N completed tasks (0 = off)
 
@@ -327,17 +350,31 @@ api_keys:
   anthropic: ${ANTHROPIC_API_KEY}
   openai: ${OPENAI_API_KEY}
   gemini: ${GEMINI_API_KEY}
+  claude_code: ${CLAUDE_CODE_OAUTH_TOKEN}   # optional, for the claude-code provider
 ```
+
+> [!NOTE]
+> `artifacts_volume` is the name of the Docker volume mounted into ephemeral executor containers as `/artifacts`. It's **required under the default socket-forwarding setup**: the host daemon resolves bind sources as host paths, so passing the in-container `artifacts_path` directly fails with `bind source did not exist`. The Compose default volume name is `buycott_artifacts`. Leave it empty only when the Docker daemon shares this container's filesystem.
 
 ### Supported providers
 
-| Provider | Config value | Env var |
-|----------|-------------|---------|
-| Anthropic Claude | `anthropic` | `ANTHROPIC_API_KEY` |
-| OpenAI | `openai` | `OPENAI_API_KEY` |
-| Google Gemini | `gemini` | `GEMINI_API_KEY` |
+Two kinds of providers. **API-key providers** are billed per token. **Subscription providers** drive a role through a locally-installed, logged-in CLI so it runs on a plan you already pay for — the core of the [mission](#mission-statement).
+
+| Provider | Config value | Kind | Auth |
+|----------|-------------|------|------|
+| Anthropic Claude | `anthropic` | API key | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | API key | `OPENAI_API_KEY` |
+| Google Gemini | `gemini` | API key | `GEMINI_API_KEY` |
+| Claude subscription | `claude-code` | subscription CLI | `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`, or an existing `claude login` |
+| ChatGPT subscription | `codex` | subscription CLI | `codex login` (credentials under `~/.codex`) |
+| Google subscription | `gemini-cli` | subscription CLI | `gemini` login (credentials under `~/.gemini`) |
 
 Mix and match freely — each role can use a different provider and model.
+
+**Subscription providers** shell out to the CLI per call, so:
+- The CLI must be on the container's `PATH` — uncomment the install block in the `Dockerfile`.
+- Authenticate on the host (`make setup` does this) and mount the credential directory in; the provider strips the matching API-key env var so it uses the subscription login, not metered billing.
+- They hit subscription rate limits faster than API keys. The pipeline backs off automatically and surfaces throttled roles in the dashboard.
 
 ---
 
@@ -417,7 +454,12 @@ roles:
 | `buycott start --no-dashboard "direction"` | Start pipeline + gRPC API only |
 | `buycott pause` | Pause after the current task completes |
 | `buycott resume` | Resume a paused pipeline |
+| `buycott reset` | Clear all run state (tasks, events, releases, logs) and start over |
+| `buycott reset --wipe-artifacts` | Also delete generated project files under `/artifacts` |
 | `buycott status` | Active task, queue depth, counts |
+
+> [!NOTE]
+> Run `buycott reset` while the pipeline is stopped (it operates on the SQLite DB directly), then `buycott start` again. From the dashboard, use the **Reset run** button instead — it stops the loop, clears state, and restarts in one step. Reset is not available over a remote `--server` connection; run it on the pipeline host.
 
 ### Inspection
 
@@ -511,10 +553,12 @@ cmd/                        CLI entry points (Cobra)
 internal/
   model/                    Shared types: Task, Release, Event, LLMLog, ExecResult, ScanResult
   config/                   YAML loader with ${ENV_VAR} expansion
-  llm/                      Provider interface · Anthropic · OpenAI · Gemini
+  llm/                      Provider interface · API providers (Anthropic · OpenAI · Gemini)
+                              CLI/subscription providers (claude-code · codex · gemini-cli)
                               LoggingProvider (records every exchange)
                               RetryingProvider (exponential backoff on 429s)
   state/                    SQLite: tasks, events, releases, pipeline_state, llm_logs
+                              ClearAll / WipeArtifacts (reset support)
   executor/                 Docker socket executor (runs agent test commands)
   roles/                    Role interface · prompt loader · PM · engineers · reviewer
                               SecurityReviewerRole (static analysis + LLM synthesis)
@@ -530,9 +574,11 @@ k8s/
   templates/                Kubernetes manifest templates ({{PLACEHOLDER}} syntax)
   manifests/                Generated manifests (gitignored — contains API keys)
 scripts/
+  setup.sh                  Interactive provider/model/auth wizard (make setup)
   entrypoint.sh             Container entrypoint
   configure-k8s.sh          Interactive manifest generator
-Makefile                    Build, compose, and k8s targets
+proto/                      gRPC service definition (regenerate with make proto)
+Makefile                    Build, compose, k8s, setup, and proto targets
 ```
 
 State persists in `{artifacts_path}/.buycott/state.db`. Kill and restart the container — the pipeline resumes exactly where it left off.
