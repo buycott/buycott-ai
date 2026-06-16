@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/spf13/cobra"
 	"buycott/internal/model"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -106,7 +106,7 @@ func printThread(l *model.LLMLog, color bool) {
 		c(ansiGray, l.Role+" · "+l.Model),
 	)
 	if l.TaskID != "" {
-		header += dim("  task:"+l.TaskID[:8])
+		header += dim("  task:" + l.TaskID[:8])
 	}
 	fmt.Println(header)
 

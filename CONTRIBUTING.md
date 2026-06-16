@@ -22,11 +22,17 @@ GOTOOLCHAIN=auto go test ./...
 
 > **`GOTOOLCHAIN=auto` is required.** `go.mod` specifies Go 1.25 (pulled up by transitive Docker SDK → OpenTelemetry dependencies). Your local toolchain may be older — the flag downloads the right version automatically.
 
-For local runs without Docker Compose, copy and edit the example config:
+For local runs without Docker Compose, generate a config with the wizard:
+
+```bash
+make setup                              # interactive: pick providers/models, handle auth
+```
+
+…or copy and edit the example by hand:
 
 ```bash
 cp config.example.yaml config.yaml
-cp .env.example .env   # add at least one API key
+cp .env.example .env   # add at least one API key / subscription token
 ```
 
 Then:
@@ -36,6 +42,8 @@ make run DIRECTION="Build something small"
 ```
 
 Prompts are loaded from `prompts/` by default. Set `execution.prompts_dir: ./prompts` in your config or the binary will look in `/etc/buycott/prompts/` (the in-container path).
+
+To work on the subscription CLI providers (`claude-code`, `codex`, `gemini-cli`), install the corresponding CLI and log in — the provider shells out to it. The parser helpers are unit-tested without the CLI, but verifying flags and output shapes requires the real binary.
 
 ---
 
@@ -63,7 +71,7 @@ Before adding an import, check that it doesn't introduce a cycle. `go build ./..
 
 ## Adding a new LLM provider
 
-1. Create `internal/llm/{provider}.go` implementing the `Provider` interface:
+Providers come in two kinds. **API providers** (`anthropic`, `openai`, `gemini`) call a vendor SDK with an API key. **CLI/subscription providers** (`claude-code`, `codex`, `gemini-cli`) shell out to a locally-installed CLI so a role runs on a subscription instead of a metered key. Both implement the same interface:
 
 ```go
 type Provider interface {
@@ -73,15 +81,24 @@ type Provider interface {
 }
 ```
 
-2. Add a `case "{provider}":` branch in `internal/llm/provider.go`'s `NewProvider()` function.
+Steps for either kind:
 
-3. Add the provider's API key field to `config.APIKeysConfig` in `internal/config/config.go`.
+1. Create `internal/llm/{provider}.go` implementing `Provider`.
+2. Add a `case "{provider}":` branch to `NewProvider()` in **`internal/llm/factory.go`**.
+3. Add `"{provider}"` to the allowed list in `config.validate()` (`internal/config/config.go`).
+4. Document it in the README [Supported providers](README.md#supported-providers) table.
 
-4. Update `config.validate()` to accept the new provider name.
+**For an API provider** — also add its key field to `config.APIKeysConfig`, return an error from `NewProvider` when the key is empty, add the env var to `.env.example`, and add the model's per-million pricing to `modelPrices` in `internal/state/llmlogs.go` so cost tracking works.
 
-5. Add the API key env var to `.env.example` and document it in the README providers table.
+**For a CLI/subscription provider** — model the implementation on `claudecode.go` / `codex.go` / `geminicli.go` and reuse the shared helpers in `cli_common.go` and `claudecode.go`:
+- `splitMessages`, `pickTool`, `jsonToolInstruction`, `extractJSON` — fold the message list into the CLI's prompt and emulate forced-tool JSON output (the CLIs have no native tool-forcing).
+- `envWithout(...)` — strip the matching API-key env var so the CLI uses its subscription login, not metered billing.
+- `scanUsageTokens(...)` — pull token counts out of the CLI's JSON output (tolerant of field-name drift across versions).
+- `setupCLIProcess(cmd)` — run in a process group with a bounded `WaitDelay` so context cancellation reliably kills child processes.
+- Verify the CLI's actual flags and JSON output shape against the installed binary (`<cli> --help`, a dry run) — the output schemas drift between versions. Surface CLI stderr in returned errors so `RetryingProvider` can detect rate-limit wording.
+- These need no API-key config field; auth flows through the CLI's own login. Add the auth flow to `scripts/setup.sh` and the install hint in the `Dockerfile`.
 
-**SDK notes:**
+**SDK notes (API providers):**
 - Anthropic and OpenAI SDKs (alpha versions) wrap every struct field in `param.Field[T]`. Use `anthropic.F(value)` / `openai.F(value)` — direct struct literal assignment is a compile error.
 - Gemini (`google.golang.org/genai`) does not use this pattern.
 - For Anthropic responses: check `block.Type == anthropic.ContentBlockTypeText` and read `block.Text` directly — there is no `.AsAny()` method.
@@ -118,6 +135,26 @@ Schema changes go in the `migrate()` function in `internal/state/db.go`. Schema 
 
 ---
 
+## The `Server` interface and gRPC
+
+`server.Server` (`internal/server/server.go`) is the control surface, implemented twice: `LocalServer` (in-process) and `grpcclient.Client` (remote, behind the `--server` flag). The dashboard and CLI talk to whichever is wired up.
+
+When you **add a method to `server.Server`** you must:
+
+1. Implement it on `LocalServer` (`internal/server/local.go`).
+2. Implement it on `grpcclient.Client` (`internal/grpcclient/client.go`) — either as a real RPC or an explicit "not supported over remote connection" error (some control actions only make sense in-process).
+3. Update the `mockServer` in `internal/dashboard/server_test.go` so the package still compiles.
+
+If the method must work **remotely**, add an RPC to `proto/buycott.proto`, regenerate, and implement it in both `grpcserver` and `grpcclient`:
+
+```bash
+make proto    # needs protoc + protoc-gen-go + protoc-gen-go-grpc on PATH
+```
+
+The generated `internal/grpcapi/*.pb.go` files are committed — include them in your PR. Anything reading from the SQLite DB (token stats, conversation logs, …) is only visible to the split Compose/k8s dashboard if it crosses this boundary; a stub that returns `nil` silently blanks the dashboard in remote mode.
+
+---
+
 ## Writing tests
 
 Tests use the stdlib `testing` package. Run the full suite with:
@@ -131,8 +168,9 @@ GOTOOLCHAIN=auto go test ./...
 - Test files live alongside the code they test (`foo.go` → `foo_test.go`), same package
 - Table-driven tests with `t.Run` for multiple cases
 - Use `t.TempDir()` for temporary files — it cleans up automatically
-- SQLite tests use a real in-memory DB (pass `":memory:"` to `state.Open`) — do not mock the database layer
+- SQLite tests open a real DB rooted at a `t.TempDir()` (`state.Open(dir)` creates `{dir}/.buycott/state.db`) — do not mock the database layer
 - LLM provider calls are tested via a `mockProvider` struct implementing `llm.Provider` — see `internal/roles/security_test.go` for the pattern
+- CLI-provider output parsing (token usage, error extraction, JSON-from-prose) is unit-tested on the parser helpers without invoking the real CLI — see `internal/llm/cli_providers_test.go`
 - Rate-limit backoff tests use context cancellation to avoid sleeping — see `internal/llm/ratelimit_test.go`
 
 ---
@@ -153,8 +191,10 @@ GOTOOLCHAIN=auto go test ./...
 - [ ] `GOTOOLCHAIN=auto go vet ./...` passes  
 - [ ] `GOTOOLCHAIN=auto go test ./...` passes
 - [ ] New behaviour has tests
-- [ ] New LLM providers or roles have a prompt file in `prompts/`
+- [ ] New built-in roles have a prompt file in `prompts/`; new providers are in the README table
 - [ ] Schema changes use versioned migrations, not raw `CREATE TABLE` rewrites
+- [ ] `proto/` changes are regenerated (`make proto`) and the generated `internal/grpcapi/` files are committed
+- [ ] New `server.Server` methods are implemented on `LocalServer`, `grpcclient.Client`, and the dashboard `mockServer`
 - [ ] No new circular imports introduced
 - [ ] `MARKETING.md` is not committed (it's gitignored)
 

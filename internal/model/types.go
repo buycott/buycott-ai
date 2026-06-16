@@ -5,13 +5,13 @@ import "time"
 type TaskStatus string
 
 const (
-	StatusPending         TaskStatus = "pending"
-	StatusInProgress      TaskStatus = "in_progress"
-	StatusPendingReview   TaskStatus = "pending_review"
-	StatusDone            TaskStatus = "done"
-	StatusRejected        TaskStatus = "rejected"
-	StatusEscalated       TaskStatus = "escalated"
-	StatusWaitingSubtask  TaskStatus = "waiting_subtask"
+	StatusPending        TaskStatus = "pending"
+	StatusInProgress     TaskStatus = "in_progress"
+	StatusPendingReview  TaskStatus = "pending_review"
+	StatusDone           TaskStatus = "done"
+	StatusRejected       TaskStatus = "rejected"
+	StatusEscalated      TaskStatus = "escalated"
+	StatusWaitingSubtask TaskStatus = "waiting_subtask"
 )
 
 type Message struct {

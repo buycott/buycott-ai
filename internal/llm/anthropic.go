@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -45,6 +46,16 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req CompletionRequest, c
 	return stream.Err()
 }
 
+// nonEmptyText guards against the Anthropic API rejecting requests with
+// "text content blocks must be non-empty". A blank message (e.g. an agent turn
+// that produced only files and no narrative) is replaced with a placeholder.
+func nonEmptyText(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "(no content)"
+	}
+	return s
+}
+
 func (p *AnthropicProvider) buildParams(req CompletionRequest) anthropic.MessageNewParams {
 	maxTokens := int64(req.MaxTokens)
 	if maxTokens == 0 {
@@ -59,12 +70,12 @@ func (p *AnthropicProvider) buildParams(req CompletionRequest) anthropic.Message
 		switch m.Role {
 		case "system":
 			params.System = anthropic.F([]anthropic.TextBlockParam{
-				anthropic.NewTextBlock(m.Content),
+				anthropic.NewTextBlock(nonEmptyText(m.Content)),
 			})
 		case "user":
-			messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
+			messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(nonEmptyText(m.Content))))
 		case "assistant":
-			messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
+			messages = append(messages, anthropic.NewAssistantMessage(anthropic.NewTextBlock(nonEmptyText(m.Content))))
 		}
 	}
 	params.Messages = anthropic.F(messages)

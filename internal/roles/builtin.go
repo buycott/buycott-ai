@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"buycott/internal/llm"
 	"buycott/internal/model"
+	"github.com/google/uuid"
 )
 
 // ── Tool schemas ─────────────────────────────────────────────────────────────
@@ -34,8 +34,8 @@ var submitWorkTool = llm.Tool{
 				"description": "Docker image to run test commands in (e.g. golang:1.22-alpine)",
 			},
 			"run_commands": map[string]any{
-				"type":  "array",
-				"items": map[string]any{"type": "string"},
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
 				"description": "Shell commands to verify the implementation",
 			},
 			"subtask": map[string]any{
@@ -172,10 +172,10 @@ func buildMessages(systemPrompt string, task *model.Task) []llm.Message {
 // ── Task output parsing ───────────────────────────────────────────────────────
 
 type agentResponse struct {
-	Narrative   string            `json:"narrative"`
-	Files       map[string]string `json:"files"`
-	RunImage    string            `json:"run_image"`
-	RunCommands []string          `json:"run_commands"`
+	Narrative   string                `json:"narrative"`
+	Files       map[string]string     `json:"files"`
+	RunImage    string                `json:"run_image"`
+	RunCommands []string              `json:"run_commands"`
 	SubTask     *model.SubTaskRequest `json:"subtask,omitempty"`
 }
 

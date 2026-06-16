@@ -96,6 +96,7 @@ func (p *ClaudeCodeProvider) Complete(ctx context.Context, req CompletionRequest
 	// Run in a neutral cwd so CLAUDE.md discovery doesn't pull in this repo.
 	cmd.Dir = os.TempDir()
 	cmd.Env = p.childEnv()
+	setupCLIProcess(cmd)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

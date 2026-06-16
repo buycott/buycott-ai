@@ -11,13 +11,13 @@ import (
 )
 
 type Config struct {
-	Project   ProjectConfig          `yaml:"project"`
-	Roles     map[string]RoleConfig  `yaml:"roles"`
-	Execution ExecutionConfig        `yaml:"execution"`
-	API       APIConfig              `yaml:"api"`
-	Dashboard DashboardConfig        `yaml:"dashboard"`
-	APIKeys   APIKeysConfig          `yaml:"api_keys"`
-	Webhooks  []WebhookConfig        `yaml:"webhooks"`
+	Project   ProjectConfig         `yaml:"project"`
+	Roles     map[string]RoleConfig `yaml:"roles"`
+	Execution ExecutionConfig       `yaml:"execution"`
+	API       APIConfig             `yaml:"api"`
+	Dashboard DashboardConfig       `yaml:"dashboard"`
+	APIKeys   APIKeysConfig         `yaml:"api_keys"`
+	Webhooks  []WebhookConfig       `yaml:"webhooks"`
 }
 
 type DashboardConfig struct {
@@ -57,6 +57,15 @@ type ExecutionConfig struct {
 	ReleaseCheckInterval int           `yaml:"release_check_interval"`
 	MinQueueDepth        int           `yaml:"min_queue_depth"`
 	MaxHistoryMessages   int           `yaml:"max_history_messages"`
+	// ArtifactsVolume is the name of a Docker volume to mount into ephemeral
+	// executor containers at /artifacts. Required under socket-forwarding (the
+	// default deployment): the host daemon resolves bind sources as HOST paths,
+	// so passing the in-container artifacts_path (e.g. /artifacts) as a bind
+	// source fails with "bind source did not exist". Naming the shared volume
+	// sidesteps host-path translation entirely. When empty, the executor falls
+	// back to bind-mounting artifacts_path (correct only when the daemon shares
+	// the same filesystem, e.g. a host-path that exists identically).
+	ArtifactsVolume string `yaml:"artifacts_volume"`
 }
 
 // WebhookConfig fires an HTTP POST to URL for each matching event type.
@@ -127,9 +136,9 @@ func (c *Config) validate() error {
 			return fmt.Errorf("roles.%s.model is required", name)
 		}
 		switch role.Provider {
-		case "anthropic", "openai", "gemini":
+		case "anthropic", "openai", "gemini", "claude-code", "codex", "gemini-cli":
 		default:
-			return fmt.Errorf("roles.%s.provider %q is not supported (use anthropic, openai, or gemini)", name, role.Provider)
+			return fmt.Errorf("roles.%s.provider %q is not supported (use anthropic, openai, gemini, claude-code, codex, or gemini-cli)", name, role.Provider)
 		}
 	}
 	return nil

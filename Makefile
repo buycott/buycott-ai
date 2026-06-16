@@ -1,4 +1,4 @@
-.PHONY: all build vet test clean \
+.PHONY: all build vet test clean proto setup \
         docker-build \
         compose-setup compose-up compose-down compose-restart compose-logs compose-ps \
         compose-status compose-conversation \
@@ -18,6 +18,11 @@ _NS = $(shell cat k8s/manifests/.namespace 2>/dev/null || echo buycott)
 # ── Go ────────────────────────────────────────────────────────────────────────
 all: build
 
+# Interactive provider/model/auth wizard → writes config.yaml, .env, and (for
+# CLI/subscription providers) docker-compose.override.yml.
+setup:
+	@bash scripts/setup.sh
+
 build:
 	@mkdir -p bin
 	GOTOOLCHAIN=auto go build -o bin/buycott ./
@@ -30,6 +35,15 @@ test:
 
 clean:
 	rm -rf bin/
+
+# Regenerate gRPC stubs from proto/buycott.proto into internal/grpcapi/.
+# Requires protoc plus protoc-gen-go and protoc-gen-go-grpc on PATH
+# (go install google.golang.org/protobuf/cmd/protoc-gen-go@latest and
+#  google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest).
+proto:
+	protoc --go_out=. --go_opt=module=buycott \
+	       --go-grpc_out=. --go-grpc_opt=module=buycott \
+	       proto/buycott.proto
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 docker-build:
@@ -107,6 +121,9 @@ help:
 	@echo ""
 	@echo "Buycott — Multi-model Task Pipeline"
 	@echo "===================================="
+	@echo ""
+	@echo "Getting started:"
+	@echo "  make setup              Interactive provider/model/auth wizard"
 	@echo ""
 	@echo "Go:"
 	@echo "  make build              Build binary → bin/buycott"

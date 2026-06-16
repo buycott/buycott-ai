@@ -22,7 +22,7 @@ type mockPM struct {
 	processCall int
 }
 
-func (m *mockPM) Name() string        { return "pm" }
+func (m *mockPM) Name() string         { return "pm" }
 func (m *mockPM) SystemPrompt() string { return "" }
 func (m *mockPM) ProcessTask(ctx context.Context, task *model.Task) (roles.TaskOutput, error) {
 	m.processCall++
@@ -53,7 +53,7 @@ type mockRole struct {
 	callCount int
 }
 
-func (m *mockRole) Name() string        { return m.roleName }
+func (m *mockRole) Name() string         { return m.roleName }
 func (m *mockRole) SystemPrompt() string { return "" }
 func (m *mockRole) ProcessTask(ctx context.Context, task *model.Task) (roles.TaskOutput, error) {
 	m.callCount++

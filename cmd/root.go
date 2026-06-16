@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"buycott/internal/config"
 	"buycott/internal/grpcclient"
 	"buycott/internal/server"
+	"github.com/spf13/cobra"
 )
 
 var (

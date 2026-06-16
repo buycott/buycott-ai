@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"buycott/internal/dashboard"
+	"github.com/spf13/cobra"
 )
 
 var dashboardPort int

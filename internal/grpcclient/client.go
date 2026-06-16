@@ -47,6 +47,10 @@ func (c *Client) Stop() error {
 	return fmt.Errorf("stop: not supported over remote connection")
 }
 
+func (c *Client) Reset(_ context.Context, _ server.ResetOptions) error {
+	return fmt.Errorf("reset: not supported over remote connection — run `buycott reset` on the pipeline host")
+}
+
 func (c *Client) Pause() error {
 	_, err := c.rpc.Pause(context.Background(), &grpcapi.Empty{})
 	return err
@@ -169,13 +173,51 @@ func (c *Client) ListReleases() ([]*model.Release, error) {
 // ---------- conversations ----------
 
 func (c *Client) ListConversations(taskID, role string, limit int) ([]*model.LLMLog, error) {
-	// Conversation logs live in the local SQLite DB and are not exposed over gRPC.
-	return nil, nil
+	resp, err := c.rpc.ListConversations(context.Background(), &grpcapi.ListConversationsRequest{
+		TaskId: taskID,
+		Role:   role,
+		Limit:  int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	var logs []*model.LLMLog
+	for _, pl := range resp.Logs {
+		l := &model.LLMLog{
+			ID:           pl.Id,
+			TaskID:       pl.TaskId,
+			Role:         pl.Role,
+			Model:        pl.Model,
+			CallType:     pl.CallType,
+			Response:     pl.Response,
+			InputTokens:  int(pl.InputTokens),
+			OutputTokens: int(pl.OutputTokens),
+			DurationMs:   pl.DurationMs,
+			CreatedAt:    time.Unix(pl.CreatedAtUnix, 0),
+		}
+		_ = json.Unmarshal([]byte(pl.MessagesJson), &l.Messages)
+		logs = append(logs, l)
+	}
+	return logs, nil
 }
 
 func (c *Client) TokenStats() ([]state.RoleTokenStats, error) {
-	// Token stats live in the local SQLite DB and are not exposed over gRPC.
-	return nil, nil
+	resp, err := c.rpc.TokenStats(context.Background(), &grpcapi.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	var stats []state.RoleTokenStats
+	for _, s := range resp.Stats {
+		stats = append(stats, state.RoleTokenStats{
+			Role:         s.Role,
+			Model:        s.Model,
+			InputTokens:  s.InputTokens,
+			OutputTokens: s.OutputTokens,
+			Calls:        s.Calls,
+			EstCostUSD:   s.EstCostUsd,
+		})
+	}
+	return stats, nil
 }
 
 // ---------- chat ----------

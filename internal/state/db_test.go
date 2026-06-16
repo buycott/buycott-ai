@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	_ "modernc.org/sqlite"
+
+	"buycott/internal/model"
 )
 
 func TestOpen_CreatesSchema(t *testing.T) {
@@ -81,4 +83,57 @@ func TestMigration_Idempotent(t *testing.T) {
 		t.Fatalf("second Open failed: %v", err)
 	}
 	db2.Close()
+}
+
+func TestClearAll(t *testing.T) {
+	dir := t.TempDir()
+	db, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Seed one row per data table.
+	NewTaskStore(db).Save(&model.Task{ID: "t1", Title: "x", Status: model.StatusPending})
+	NewEventStore(db).Append("seed", map[string]any{"a": 1})
+	if _, err := db.Exec(`INSERT INTO pipeline_state(key,value) VALUES('k','v')`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ClearAll(db); err != nil {
+		t.Fatalf("ClearAll: %v", err)
+	}
+
+	for _, tbl := range []string{"tasks", "events", "releases", "llm_logs", "pipeline_state"} {
+		var n int
+		if err := db.QueryRow("SELECT COUNT(*) FROM " + tbl).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", tbl, err)
+		}
+		if n != 0 {
+			t.Errorf("table %s not cleared: %d rows remain", tbl, n)
+		}
+	}
+}
+
+func TestWipeArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	// .buycott (state) must survive; everything else must go.
+	os.MkdirAll(filepath.Join(dir, ".buycott"), 0755)
+	os.WriteFile(filepath.Join(dir, ".buycott", "state.db"), []byte("db"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("pkg"), 0644)
+	os.MkdirAll(filepath.Join(dir, "src"), 0755)
+	os.WriteFile(filepath.Join(dir, "src", "app.js"), []byte("x"), 0644)
+
+	if err := WipeArtifacts(dir); err != nil {
+		t.Fatalf("WipeArtifacts: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".buycott", "state.db")); err != nil {
+		t.Errorf("state db should be preserved: %v", err)
+	}
+	for _, p := range []string{"main.go", "src"} {
+		if _, err := os.Stat(filepath.Join(dir, p)); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed", p)
+		}
+	}
 }

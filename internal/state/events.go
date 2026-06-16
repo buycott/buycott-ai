@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"buycott/internal/model"
+	"github.com/google/uuid"
 )
 
 type EventStore struct {

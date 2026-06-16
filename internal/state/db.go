@@ -29,6 +29,49 @@ func Open(artifactsPath string) (*sql.DB, error) {
 	return db, nil
 }
 
+// ClearAll removes all run data (tasks, events, releases, LLM logs, and the
+// pipeline_state counters) while preserving the schema. Used to start a run
+// over from scratch.
+func ClearAll(db *sql.DB) error {
+	tables := []string{"tasks", "events", "releases", "llm_logs", "pipeline_state"}
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin reset tx: %w", err)
+	}
+	for _, t := range tables {
+		if _, err := tx.Exec("DELETE FROM " + t); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("clearing %s: %w", t, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit reset tx: %w", err)
+	}
+	return nil
+}
+
+// WipeArtifacts deletes every entry under artifactsPath except the .buycott
+// state directory (which holds the live SQLite DB). Used by a reset to discard
+// all generated project files.
+func WipeArtifacts(artifactsPath string) error {
+	entries, err := os.ReadDir(artifactsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading artifacts dir: %w", err)
+	}
+	for _, e := range entries {
+		if e.Name() == ".buycott" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(artifactsPath, e.Name())); err != nil {
+			return fmt.Errorf("removing %s: %w", e.Name(), err)
+		}
+	}
+	return nil
+}
+
 func migrate(db *sql.DB) error {
 	var version int
 	_ = db.QueryRow("PRAGMA user_version").Scan(&version)

@@ -161,9 +161,9 @@ func TestRetryingProvider_NonRateLimitErrNotRetried(t *testing.T) {
 
 func TestRetryingProvider_RateLimitCallsCallback(t *testing.T) {
 	inner := &stubProvider{
-		name:    "test",
-		failN:   1,
-		failErr: errors.New("429 rate limit exceeded"),
+		name:     "test",
+		failN:    1,
+		failErr:  errors.New("429 rate limit exceeded"),
 		response: CompletionResponse{Content: "ok"},
 	}
 
@@ -208,9 +208,9 @@ func TestRetryingProvider_RateLimitCallsCallback(t *testing.T) {
 
 func TestRetryingProvider_ClearedCallbackAfterRecovery(t *testing.T) {
 	inner := &stubProvider{
-		name:    "test",
-		failN:   1,
-		failErr: errors.New("429 rate limit exceeded retry after 0"),
+		name:     "test",
+		failN:    1,
+		failErr:  errors.New("429 rate limit exceeded retry after 0"),
 		response: CompletionResponse{Content: "ok"},
 	}
 
