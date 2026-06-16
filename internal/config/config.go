@@ -70,6 +70,10 @@ type APIKeysConfig struct {
 	Anthropic string `yaml:"anthropic"`
 	OpenAI    string `yaml:"openai"`
 	Gemini    string `yaml:"gemini"`
+	// ClaudeCode is an optional long-lived OAuth token (from `claude setup-token`)
+	// used by the "claude-code" provider to drive the CLI on a Claude
+	// subscription. Optional: if empty, the CLI falls back to an existing login.
+	ClaudeCode string `yaml:"claude_code"`
 }
 
 var envVarRe = regexp.MustCompile(`\$\{([^}]+)\}`)
@@ -95,13 +99,16 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// expandEnvVars replaces ${VAR} references with the corresponding environment
+// variable. An unset (or empty) variable expands to an empty string rather than
+// being left as the literal "${VAR}" — otherwise the placeholder would leak
+// through as a value (e.g. an API key literally equal to "${ANTHROPIC_API_KEY}"),
+// passing non-empty checks and producing a confusing auth failure downstream
+// instead of a clear "not set" error.
 func expandEnvVars(s string) string {
 	return envVarRe.ReplaceAllStringFunc(s, func(match string) string {
 		key := strings.TrimSuffix(strings.TrimPrefix(match, "${"), "}")
-		if val := os.Getenv(key); val != "" {
-			return val
-		}
-		return match
+		return os.Getenv(key)
 	})
 }
 

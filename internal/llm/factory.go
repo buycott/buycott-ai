@@ -23,6 +23,10 @@ func NewProvider(roleCfg config.RoleConfig, apiKeys config.APIKeysConfig) (Provi
 			return nil, fmt.Errorf("GEMINI_API_KEY not set")
 		}
 		return NewGeminiProvider(apiKeys.Gemini, roleCfg.Model), nil
+	case "claude-code":
+		// No API key required: the `claude` CLI authenticates via the Claude
+		// subscription (OAuth). apiKeys.ClaudeCode is an optional setup-token.
+		return NewClaudeCodeProvider(apiKeys.ClaudeCode, roleCfg.Model), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", roleCfg.Provider)
 	}
