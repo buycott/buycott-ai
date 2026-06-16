@@ -23,7 +23,7 @@ data:
         model: claude-sonnet-4-6
       copywriter:
         provider: anthropic
-        model: claude-haiku-4-5-20251001
+        model: claude-haiku-4-5
       reviewer:
         provider: anthropic
         model: claude-sonnet-4-6

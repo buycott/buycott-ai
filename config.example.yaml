@@ -17,7 +17,7 @@ roles:
 
   copywriter:
     provider: anthropic
-    model: claude-haiku-4-5-20251001
+    model: claude-haiku-4-5
 
   # Code reviewer — reviews engineer output before PM review.
   # Engineers must implement all change requests before proceeding.

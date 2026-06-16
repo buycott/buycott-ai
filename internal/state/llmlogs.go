@@ -3,6 +3,7 @@ package state
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,32 +86,26 @@ type RoleTokenStats struct {
 
 // per-million token prices [input, output]; keyed on the model fragment after the "/" separator.
 var modelPrices = map[string][2]float64{
-	"claude-opus-4-8":          {5.00, 25.00},
-	"claude-opus-4-7":          {5.00, 25.00},
-	"claude-opus-4-6":          {5.00, 25.00},
-	"claude-sonnet-4-6":        {3.00, 15.00},
-	"claude-haiku-4-5":         {1.00, 5.00},
-	"claude-haiku-4-5-20251001":{1.00, 5.00},
-	"gpt-4o":                   {2.50, 10.00},
-	"gpt-4o-mini":              {0.15, 0.60},
-	"gpt-4-turbo":              {10.00, 30.00},
-	"gemini-1.5-pro":           {1.25, 5.00},
-	"gemini-1.5-flash":         {0.075, 0.30},
-	"gemini-2.0-flash":         {0.075, 0.30},
+	"claude-fable-5":            {10.00, 50.00},
+	"claude-opus-4-8":           {5.00, 25.00},
+	"claude-opus-4-7":           {5.00, 25.00},
+	"claude-opus-4-6":           {5.00, 25.00},
+	"claude-sonnet-4-6":         {3.00, 15.00},
+	"claude-haiku-4-5":          {1.00, 5.00},
+	"claude-haiku-4-5-20251001": {1.00, 5.00}, // defensive alias: canonical ID has no date suffix
+	"gpt-4o":                    {2.50, 10.00},
+	"gpt-4o-mini":               {0.15, 0.60},
+	"gpt-4-turbo":               {10.00, 30.00},
+	"gemini-1.5-pro":            {1.25, 5.00},
+	"gemini-1.5-flash":          {0.075, 0.30},
+	"gemini-2.0-flash":          {0.075, 0.30},
 }
 
 func estimateCost(modelName string, inputTok, outputTok int64) float64 {
-	// modelName is stored as "provider/model-id" — strip provider prefix.
+	// modelName may be stored as "provider/model-id" — key on the fragment after the last "/".
 	key := modelName
-	if i := len("anthropic/"); len(modelName) > i && (modelName[:i] == "anthropic/" || modelName[:7] == "openai/" || modelName[:7] == "gemini/") {
-		if j := len(modelName); j > 0 {
-			for k, c := range modelName {
-				if c == '/' {
-					key = modelName[k+1:]
-					break
-				}
-			}
-		}
+	if i := strings.LastIndex(modelName, "/"); i >= 0 {
+		key = modelName[i+1:]
 	}
 	p, ok := modelPrices[key]
 	if !ok {
