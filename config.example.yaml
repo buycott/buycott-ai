@@ -64,3 +64,10 @@ api_keys:
   anthropic: ${ANTHROPIC_API_KEY}
   openai: ${OPENAI_API_KEY}
   gemini: ${GEMINI_API_KEY}
+  # Optional: drive roles on a Claude subscription via the `claude` CLI instead
+  # of a metered API key. Set a role's `provider: claude-code` to use it.
+  # The token below comes from `claude setup-token` (used for headless/CI auth);
+  # omit it to rely on an existing `claude login`. Note: subscription rate limits
+  # throttle an autonomous multi-agent loop far sooner than an API key — best for
+  # low-volume experimentation. Requires the `claude` CLI on PATH in the image.
+  claude_code: ${CLAUDE_CODE_OAUTH_TOKEN}
