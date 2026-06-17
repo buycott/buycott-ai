@@ -1,0 +1,25 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/getting-started/configure-coderabbit
+# This repo's code is largely AI-generated (see CONTRIBUTING.md), so reviews are
+# the real quality gate. Be thorough and block on serious findings.
+language: en-US
+reviews:
+  profile: assertive
+  # Treat CodeRabbit's "request changes" as a gate — keep it open until resolved.
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "**/*.go"
+      instructions: >-
+        Follow CLAUDE.md and CONTRIBUTING.md. Flag as major/critical: security
+        issues (injection, secret exposure, unsafe SQL), empty or placeholder
+        implementations, swallowed errors, and new circular imports. Verify SDK
+        param.Field wrappers and prompt-loading conventions.
+    - path: ".github/workflows/**"
+      instructions: >-
+        Scrutinize for supply-chain and injection risks: unpinned actions,
+        job-wide secrets, untrusted input interpolated into run blocks,
+        pull_request_target checking out PR head. Flag these as major or critical.

@@ -8,6 +8,8 @@
 
 Buycott (Multi-model Task Pipeline) is a headless Go binary that orchestrates multiple LLM agents (PM, backend dev, frontend dev, copywriter, and custom roles) to autonomously build software. A PM agent receives a product direction, generates tasks, delegates them to role agents, reviews the output, and periodically decides whether to cut a release. Agents execute real code inside ephemeral Docker containers.
 
+Roles run on either metered **API providers** (`anthropic`, `openai`, `gemini`) or **CLI/subscription providers** (`claude-code`, `codex`, `gemini-cli`) that shell out to the vendor's own coding-agent CLI so usage runs on a flat-rate subscription instead of a metered key (see [LLM providers](#llm-providers)). There is also a **no-install path** in `prompt-packs/` that skips the binary entirely — paste a generated prompt into an interactive coding-agent session. The economic premise (deliberately consuming subsidized provider compute) is in `MISSION.md`; the launch plan is in `MARKETING.md` / `marketing/` (those are content, not code — don't treat their guidance as engineering instructions).
+
 ## Build and run
 
 ```bash
@@ -20,6 +22,11 @@ GOTOOLCHAIN=auto go vet ./...
 
 # Via Docker Compose (recommended)
 docker compose up
+
+# Interactive setup wizard — picks a provider/model per role and handles the
+# auth flow (API keys + subscription CLI logins); writes config.yaml, .env,
+# and (for subscription providers) docker-compose.override.yml.
+make setup
 ```
 
 **Never omit `GOTOOLCHAIN=auto`** when building locally. The `go.mod` was bumped to `go 1.25.0` by `go mod tidy` because the Docker SDK's transitive otel dependencies require it. Without the flag, Go 1.22/1.23 will refuse to build.
@@ -35,7 +42,7 @@ internal/llm            ← no internal imports
 internal/executor       ← imports model
 internal/state          ← imports model
 internal/roles          ← imports model, llm, config
-internal/pipeline       ← imports model, state, roles, executor
+internal/pipeline       ← imports model, state, roles, executor, config
 internal/server         ← imports model, config, state, pipeline, roles, llm, executor
 cmd/                    ← imports config, server
 ```
@@ -64,13 +71,28 @@ The same applies to `openai.ChatCompletionNewParams` using `openai.F(...)`. Gemi
 
 For reading Anthropic response content, check `block.Type == anthropic.ContentBlockTypeText` and read `block.Text` directly — there is no `.AsAny()` method.
 
+Anthropic rejects empty text blocks (`messages: text content blocks must be non-empty`). `nonEmptyText()` in `anthropic.go` guards every message, and `assistantTurn()` in `pipeline.go` avoids persisting an empty agent turn into `ConversationHistory` (an engineer can submit work via `files` with an empty `narrative`).
+
+## LLM providers
+
+`internal/llm` has two kinds of `Provider`, both behind the same interface (`Complete` / `Stream` / `Name`), selected per role by the `NewProvider` switch in **`internal/llm/factory.go`** and validated by `config.validate()`:
+
+- **API providers** call a vendor SDK with an API key: `anthropic.go`, `openai.go`, `gemini.go`. Config: `api_keys.{anthropic,openai,gemini}`.
+- **CLI/subscription providers** shell out to a locally-installed coding-agent CLI so a role runs on a subscription: `claudecode.go` (`claude`), `codex.go` (`codex`), `geminicli.go` (`gemini`). They strip the matching API-key env var so the CLI uses its subscription login, emulate forced-tool JSON output (the CLIs have no tool-forcing), and scrape token usage from the CLI's JSON. Shared helpers: `cli_common.go` (`envWithout`, `scanUsageTokens`, `setupCLIProcess`) and `claudecode.go` (`splitMessages`, `pickTool`, `jsonToolInstruction`, `extractJSON`).
+
+To add a provider: implement `Provider`, add a `case` in `factory.go`, add the name to `config.validate()`'s allowed list, and — for an API provider — add its key to `APIKeysConfig` and its per-million pricing to `modelPrices` in `state/llmlogs.go` (cost tracking). CLI providers need no key; wire their login into `scripts/setup.sh` and the optional CLI-install block in the `Dockerfile`.
+
+`setupCLIProcess` runs the CLI in its own process group with a bounded `WaitDelay`, so context cancellation reliably kills the children the CLIs spawn (otherwise `Cmd.Run` blocks on the held-open pipes long after cancel). Always verify a CLI's flags and JSON shape against the real binary — they drift between versions.
+
 ## SQLite
 
 Uses `modernc.org/sqlite` (pure Go, no CGO). **Do not switch to `mattn/go-sqlite3`** — it requires CGO which complicates Docker builds.
 
-All schema changes go in the `migrate()` function in `internal/state/db.go`. Add new `CREATE TABLE IF NOT EXISTS` statements; do not modify existing ones (there is no migration versioning yet, so existing DBs would not be updated).
+Schema changes go in `migrate()` in `internal/state/db.go`, which versions via `PRAGMA user_version` — apply each version's changes in an `if version < N` block and bump the pragma after. Use `ALTER TABLE ADD COLUMN` for additive changes and never edit existing `CREATE TABLE` statements (running DBs are upgraded in place, not recreated).
 
 State is stored at `{artifacts_path}/.buycott/state.db`. The `pipeline_state` table is a simple key/value store for durable counters and timestamps (e.g., `tasks_since_release_check`, `last_release_check_at`).
+
+`state.ClearAll(db)` truncates all data tables (tasks/events/releases/llm_logs/pipeline_state) and `state.WipeArtifacts(path)` deletes generated files while preserving `.buycott/` — both used by reset (below).
 
 ## Task state machine
 
@@ -108,6 +130,22 @@ After every N completed tasks (`execution.release_check_interval`, default 10), 
 4. Records the release in the `releases` DB table
 
 Set `release_check_interval: 0` in config to disable.
+
+## Reset
+
+`buycott reset` (`cmd/reset.go`) and the dashboard **Reset run** button clear a run and start over, via `server.Server.Reset(ctx, ResetOptions{WipeArtifacts, Restart})`:
+
+- `LocalServer.Reset` calls `stopAndWait()` (cancels the pipeline goroutine and blocks on a done channel), then `state.ClearAll`, optionally `state.WipeArtifacts`, emits a `pipeline.reset` event, and — if `Restart` — relaunches from the remembered direction using the long-lived `baseCtx` (captured in `Start`, never a request context).
+- The CLI passes `Restart:false` (run it while the pipeline is stopped; it operates on the DB directly). The dashboard passes `Restart:true` (stops the loop and restarts in one step).
+- Over gRPC (`--server`), `grpcclient.Reset` returns "not supported over remote connection" — run `buycott reset` on the pipeline host (`Start`/`Stop` behave the same way).
+
+## Server interface & gRPC
+
+`server.Server` (`internal/server/server.go`) is implemented twice: `LocalServer` (in-process) and `grpcclient.Client` (remote, behind `--server`). The dashboard and CLI talk to whichever is wired up.
+
+Adding a method to `server.Server` means implementing it on **both**, plus the `mockServer` in `internal/dashboard/server_test.go` (or the package won't compile). If it must work remotely, add an RPC to `proto/buycott.proto`, regenerate with **`make proto`** (needs `protoc` + `protoc-gen-go` + `protoc-gen-go-grpc` on PATH), and implement it in `grpcserver` and `grpcclient`. The generated `internal/grpcapi/*.pb.go` are committed.
+
+**Gotcha:** anything reading the SQLite DB (token stats, conversation logs) is only visible to the split Compose/k8s dashboard if it crosses this boundary. A `grpcclient` method that stubs `return nil` silently blanks the dashboard in remote mode — that's what hid token usage until `TokenStats` / `ListConversations` got real RPCs.
 
 ## Adding a new built-in role
 
@@ -170,7 +208,9 @@ The PM's `GenerateTasks` call receives a parallel `projectState` map with `recen
 
 ## Docker execution
 
-Agents run code in ephemeral containers via the Docker socket (`/var/run/docker.sock` mounted into the Buycott container). This is socket-forwarding, not true DinD — the spawned containers are siblings of the Buycott container on the host, not children. The artifacts volume is bind-mounted into each ephemeral container at `/artifacts`.
+Agents run code in ephemeral containers via the Docker socket (`/var/run/docker.sock` mounted into the Buycott container). This is socket-forwarding, not true DinD — the spawned containers are siblings of the Buycott container on the host, not children.
+
+Because the host daemon resolves bind-mount sources as **host** paths, bind-mounting the in-container `artifacts_path` (e.g. `/artifacts`) into a sibling fails with `bind source did not exist at container create time`. So `execution.artifacts_volume` names a Docker volume that the executor mounts into each ephemeral container at `/artifacts` (`mount.TypeVolume`); the pipeline mounts the same volume, so output is shared. Signature: `NewDockerExecutor(dockerSocket, artifactsVolume)`. When the volume name is empty it falls back to a bind mount (correct only when the daemon shares this container's filesystem). The Compose default volume name is `buycott_artifacts`.
 
 ## Deployment paths
 
@@ -229,14 +269,25 @@ Starts pipeline + gRPC API but skips the dashboard goroutine. Used by the `pipel
 | `internal/roles/builtin.go` | PM, Backend, Frontend, Copywriter constructors + response parsers |
 | `internal/roles/prompts.go` | `LoadPrompt()` — file-based prompt resolver |
 | `internal/llm/provider.go` | Provider interface + LoggingProvider wrapper |
+| `internal/llm/factory.go` | `NewProvider` — selects the provider per role by name |
+| `internal/llm/anthropic.go`, `openai.go`, `gemini.go` | API providers (SDK + key) |
+| `internal/llm/claudecode.go`, `codex.go`, `geminicli.go` | CLI/subscription providers (shell out to `claude`/`codex`/`gemini`) |
+| `internal/llm/cli_common.go` | Shared CLI-provider helpers (`envWithout`, `scanUsageTokens`, `setupCLIProcess`) |
 | `internal/llm/ratelimit.go` | RetryingProvider — 429 detection, exponential backoff, RateLimitFunc callback |
+| `internal/state/db.go` | SQLite open + versioned migration + `ClearAll` / `WipeArtifacts` |
+| `internal/server/server.go` | `Server` interface + `ResetOptions` |
 | `internal/server/local.go` | Wires everything together; implements `Server` interface |
 | `internal/grpcserver/server.go` | gRPC server wrapping `server.Server` |
 | `internal/grpcclient/client.go` | gRPC client implementing `server.Server` (for `--server` flag) |
-| `internal/dashboard/server.go` | HTTP dashboard + SSE events endpoint |
+| `internal/dashboard/server.go` | HTTP dashboard + SSE events endpoint + `POST /api/reset` |
 | `internal/dashboard/index.html` | Embedded single-page dashboard UI |
 | `cmd/dashboard.go` | `buycott dashboard` subcommand |
+| `cmd/reset.go` | `buycott reset` subcommand |
+| `proto/buycott.proto` | gRPC service definition (regenerate with `make proto`) |
 | `k8s/templates/*.yaml` | Kubernetes manifest templates |
 | `scripts/configure-k8s.sh` | Interactive k8s manifest generator |
-| `Makefile` | Build, compose, and k8s targets |
+| `scripts/setup.sh` | Interactive provider/model/auth wizard (`make setup`) |
+| `Makefile` | Build, compose, k8s, `setup`, and `proto` targets |
 | `prompts/*.md` | System prompt content for each role |
+| `prompt-packs/` | No-install interactive approach: `roll.sh` (prompt generator), `nudge.sh` |
+| `marketing/`, `MARKETING.md` | Launch plan + `SKILLS.md` content-generation guidance (not code) |

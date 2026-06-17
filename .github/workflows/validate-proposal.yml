@@ -1,0 +1,76 @@
+name: Validate proposal
+
+# Enforces "submit prompts, not code": an outside PR may only ADD a single
+# proposals/<slug>.md and nothing else. Maintainers (write access) and the
+# agent's own result PRs are exempt — and the exemption for proposal/* branches
+# is gated on the author being github-actions[bot] so an outside contributor
+# can't bypass validation just by naming their fork branch "proposal/...".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  prompts-only:
+    if: >-
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) &&
+      !(startsWith(github.head_ref, 'proposal/') && github.event.pull_request.user.login == 'github-actions[bot]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: check
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          added=0
+          offending=""
+          while IFS=$'\t' read -r status file; do
+            if [ "$status" = "A" ] && printf '%s' "$file" | grep -qE '^proposals/[a-z0-9][a-z0-9-]*\.md$'; then
+              added=$((added + 1))
+            else
+              offending="${offending}${status}\t${file}\n"
+            fi
+          done < <(git diff --name-status "$BASE" "$HEAD")
+
+          if [ -n "$offending" ] || [ "$added" -ne 1 ]; then
+            [ "$added" -ne 1 ] && offending="${offending}(a proposal PR must ADD exactly one proposals/<slug>.md; got ${added})\n"
+            {
+              echo 'ok=false'
+              printf 'offending<<EOF\n%b\nEOF\n' "$offending"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo 'ok=true' >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.ok == 'false'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          OFFENDING: ${{ steps.check.outputs.offending }}
+        with:
+          script: |
+            const offending = (process.env.OFFENDING || '').trim();
+            const body = [
+              "👋 Thanks for the interest — but this repo takes **prompts, not code**.",
+              "",
+              "A proposal PR must **add exactly one** `proposals/<slug>.md` (lowercase letters, digits, hyphens) and change nothing else. Problems here:",
+              "```",
+              offending,
+              "```",
+              "",
+              "Copy `proposals/TEMPLATE.md` to `proposals/<slug>.md`, describe what you want built, and open a PR with just that file. A maintainer reviews the prompt; once it's labeled `approved`, an agent runs it and opens the resulting code as a PR. See [`proposals/README.md`](../blob/main/proposals/README.md).",
+            ].join("\n");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            core.setFailed("PR is not a single proposals/<slug>.md addition.");

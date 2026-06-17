@@ -1,0 +1,129 @@
+name: Address review
+
+# Lets a maintainer have the agent take a pass at review feedback (CodeRabbit's
+# and humans') on an agent-generated result PR. Comment `/address` on the PR.
+#
+# Gate: only maintainers (write access) can trigger; only works on the agent's
+# own result PRs (head branch `proposal/*` in this repo, not a fork). Secrets are
+# scoped to the steps that need them.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: address-review-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  address:
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/address') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PR: ${{ github.event.issue.number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Resolve & guard the PR branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pr_json="$(gh api "repos/${REPO}/pulls/${PR}")"
+          branch="$(printf '%s' "$pr_json" | jq -r '.head.ref')"
+          headrepo="$(printf '%s' "$pr_json" | jq -r '.head.repo.full_name')"
+          author="$(printf '%s' "$pr_json" | jq -r '.user.login')"
+          # Only the agent's own result PRs: same repo, opened by the bot, exact branch shape.
+          if [ "$headrepo" != "$REPO" ] \
+             || [ "$author" != "github-actions[bot]" ] \
+             || ! printf '%s' "$branch" | grep -qE '^proposal/[a-z0-9][a-z0-9-]*-[0-9]+$'; then
+            gh pr comment "$PR" --body "🤖 \`/address\` only works on agent-generated result PRs (opened by the agent, on a \`proposal/<slug>-<runid>\` branch in this repo)."
+            exit 1
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Gather review feedback into a prompt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          {
+            echo "You opened this PR. Address the code-review feedback below on your own change."
+            echo "You MUST resolve every item flagged major or critical; resolve minor/nitpick items where reasonable."
+            echo "Keep changes minimal and focused. Ensure GOTOOLCHAIN=auto go build ./..., go vet ./..., and go test ./... all pass."
+            echo "Do not modify .github/, CI, or secrets. Do not print environment variables."
+            echo
+            echo "--- INLINE REVIEW COMMENTS ---"
+            gh api "repos/${REPO}/pulls/${PR}/comments" --paginate \
+              --jq '.[] | "[\(.user.login)] \(.path):\(.line // .original_line // 0)\n\(.body)\n"' || true
+            echo
+            echo "--- REVIEW SUMMARIES & PR COMMENTS ---"
+            gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+              --jq '.[] | "[\(.user.login)]\n\(.body)\n"' || true
+          } > /tmp/prompt.md
+          echo "----- prompt -----"; cat /tmp/prompt.md
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude Code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -o pipefail
+          cat /tmp/prompt.md | claude -p \
+            --permission-mode bypassPermissions \
+            --output-format json \
+            ${{ vars.PROPOSAL_MODEL && format('--model {0}', vars.PROPOSAL_MODEL) || '' }} \
+            > /tmp/result.json || true
+          jq -r '.result // "(no summary returned)"' /tmp/result.json > /tmp/summary.txt 2>/dev/null \
+            || echo "(agent run failed — see logs)" > /tmp/summary.txt
+
+      - name: Build / vet / test
+        id: build
+        continue-on-error: true
+        run: GOTOOLCHAIN=auto go build ./... && GOTOOLCHAIN=auto go vet ./... && GOTOOLCHAIN=auto go test ./...
+
+      - name: Commit the fixes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            gh pr comment "$PR" --body "🤖 Took a pass at the review, but made no changes."
+            exit 0
+          fi
+          git config user.name  "buycott-agent[bot]"
+          git config user.email "buycott-agent[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "address review feedback on #${PR}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:${{ steps.pr.outputs.branch }}"
+          {
+            echo "🤖 Took a pass at the review feedback (build/vet/test: \`${{ steps.build.outcome }}\`)."
+            echo
+            sed 's/^/> /' /tmp/summary.txt
+            echo
+            echo "Re-review when ready."
+          } > /tmp/comment.md
+          gh pr comment "$PR" --body-file /tmp/comment.md
+          if [ "${{ steps.build.outcome }}" != "success" ]; then exit 1; fi
