@@ -71,16 +71,13 @@ Don't use this with your work accounts, that's not your money. Don't use it with
 
 <img src="images/buycott-profile.png" align="right" width="200" style="margin-left: 24px; margin-bottom: 16px;">
 
-Buycott is a **headless container** that runs an autonomous AI software development team. You give it a product direction in plain English. It handles the rest: decomposing work into tasks, writing and testing code, reviewing its own output, and cutting versioned releases — continuously, without you lifting a finger.
+Buycott puts the AI subscriptions you already pay for to work building software — running them hard to consume the compute the providers sell below cost. There are two ways to use it:
 
-It works two ways, and you can mix them per role:
+**Prompt packs — no install.** Paste a generated prompt into the interactive coding agent your subscription already includes — Claude Code, Codex, or the Gemini CLI — flip it to auto-approve, and it builds a real, open-ended project on its own until you hit your rate limit. No Docker, no API key, two-minute start, and nothing you have to ship — the point is the compute consumed, not the code. See [Prompt packs](#prompt-packs-no-install).
 
-- **Metered API keys** — Anthropic, OpenAI, and Gemini, billed per token.
-- **Subscriptions** — drive a role through the `claude`, `codex`, or `gemini` CLI so it runs on a Claude / ChatGPT / Google plan you already pay for. This is the point: those plans are sold below cost, so putting idle subscription capacity to work burns the provider's money, not yours. See the [Mission Statement](#mission-statement).
+**The autonomous pipeline.** A **headless container** that runs a whole AI dev team: you give it a product direction in plain English, and a PM agent decomposes it into tasks, engineer agents write and test code, a reviewer checks the output, and versioned releases ship — continuously, without you lifting a finger. Run it on metered **API keys** (Anthropic / OpenAI / Gemini, billed per token) or on the **subscriptions** you already pay for (via the `claude` / `codex` / `gemini` CLIs), mixed per role — e.g. a Claude PM on API, a `codex`-subscription backend, a `gemini`-subscription copywriter. Every exchange is logged with per-role token and cost tracking, and a live dashboard streams it in real time.
 
-Mix freely — e.g., a Claude PM on API, a `codex`-subscription backend, and a `gemini`-subscription copywriter. Every prompt/response exchange is logged and inspectable, with per-role token and cost tracking. A live web dashboard streams the action in real time.
-
-The longer it runs, the more it burns. Point it at a hard problem and walk away.
+Either way, the longer it runs, the more of their subsidized compute it burns. See the [Mission Statement](#mission-statement).
 
 <br clear="right">
 
