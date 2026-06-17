@@ -19,6 +19,10 @@ artifacts/
 *.db-shm
 *.db-wal
 
+# ── Local tooling ─────────────────────────────────────────────────────────────
+# Claude Code local settings / state (may contain machine-specific paths)
+.claude/
+
 # ── Config / secrets ──────────────────────────────────────────────────────────
 # Copy from config.example.yaml; never commit real keys
 config.yaml
