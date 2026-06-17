@@ -26,6 +26,7 @@
   - [2. Run](#2-run)
   - [3. Watch it work](#3-watch-it-work)
   - [4. Dashboard](#4-dashboard)
+- [Prompt packs (no-install)](#prompt-packs-no-install)
 - [Deployment](#deployment)
   - [Docker Compose](#docker-compose--recommended-for-single-host)
   - [Kubernetes](#kubernetes)
@@ -178,9 +179,44 @@ make compose-conversation   # recent prompt/response exchanges
 
 Open **http://localhost:8000** — live pipeline status, task list, event stream, releases, per-role token usage / cost, and full conversation logs, all updating in real time via SSE. Click any event to expand its full payload. The **Reset run** button clears all state and starts over from scratch (see [`buycott reset`](#pipeline-control)).
 
-### No-install option: prompt packs
+> [!TIP]
+> Don't want to run the pipeline at all? The [prompt packs](#prompt-packs-no-install) are a zero-setup, no-Docker, no-API-key alternative — paste a generated prompt into your subscription's coding agent and let it run.
 
-Don't want to run the pipeline at all? [`prompt-packs/`](prompt-packs/) contains fill-in-the-blank prompts you paste into an interactive coding-agent session (Claude Code, Codex, or the Gemini CLI) in auto-approve mode — it builds a real, open-ended project and runs until your subscription's rate limit. Zero setup, no Docker, no API key; the lowest-friction way to put a subscription to work.
+---
+
+## Prompt packs (no-install)
+
+The lowest-friction way to use this: no Docker, no Buycott binary, no API key. Instead of running the autonomous pipeline, you paste a prepared prompt into the interactive coding agent that ships with your subscription — Claude Code, Codex, or the Gemini CLI — in auto-approve mode, and let it grind on a large, self-perpetuating project until you hit your plan's rate limit.
+
+Because *you* start an interactive session and the agent does exactly what it's built for — agentic coding on a big task — this is ordinary product usage and the hardest variant for a provider to call abuse, while still putting your flat-rate subscription compute to work.
+
+**1. Make a throwaway directory** (auto-approve lets the agent run shell commands, so sandbox it — ideally a disposable VM/container):
+
+```bash
+mkdir burn-$(date +%s) && cd "$_"
+```
+
+**2. Generate a prompt** with the included script — it fills a "build something real, forever" template from random ad-lib tables, so every session builds a different project:
+
+```bash
+/path/to/prompt-packs/roll.sh -c     # random prompt, copied to your clipboard
+# roll.sh            print to stdout
+# roll.sh -s 1234    reproducible roll (share the seed to coordinate)
+```
+
+**3. Launch the agent in auto-approve mode** and paste the prompt in:
+
+```bash
+claude --permission-mode acceptEdits                       # Claude Code
+codex --ask-for-approval never --sandbox workspace-write   # Codex
+gemini --approval-mode auto_edit                           # Gemini CLI
+```
+
+**4. Keep it going.** Agents periodically decide a turn is "done" and yield — that's expected, not a failure. When it pauses, paste the keep-going nudge (in [`prompt-packs/`](prompt-packs/)) or relaunch; an optional `nudge.sh` can auto-poke it via tmux. Hitting a rate limit *is the goal* — that's a chunk of your subscription's subsidized capacity, spent.
+
+The prompt is engineered to sustain long runs — a self-growing backlog plus file-based memory (`STATE.md` / `BACKLOG.md`) so it keeps working through context compaction rather than wrapping up.
+
+See [`prompt-packs/README.md`](prompt-packs/README.md) for the full walkthrough, the per-agent flags, customizing what it builds, and the safety notes. This is the **interactive** approach; for a fully autonomous, parallel, headless version, run the pipeline (above) — at the cost of more setup and, on a subscription, more exposure to automated-use terms.
 
 ---
 
