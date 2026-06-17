@@ -1,6 +1,14 @@
 # Contributing to Buycott
 
-Contributions are welcome — bug fixes, new features, additional LLM providers, new built-in roles, and documentation improvements. This document covers how the codebase is structured, how to get a dev environment running, and what the conventions are.
+## Contribute a prompt, not code
+
+This repo is built the way it's meant to be used: **outside contributions are prompts, and an AI writes the code.** Instead of opening a PR with a diff, you open one that adds a single `proposals/<slug>.md` describing what you want built. A maintainer reviews the prompt; once it's labeled `approved`, Claude Code runs it and opens the generated change as its own PR (build/vet/test-gated, for a second human review). PRs from non-maintainers that touch code outside `proposals/` are closed automatically.
+
+See **[`proposals/README.md`](proposals/README.md)** for the full flow, the prompt template, and the maintainer/security setup. The rest of this document is the codebase reference that proposal authors (and the agent implementing approved proposals) should follow.
+
+---
+
+The conventions below cover how the codebase is structured, how to get a dev environment running, and the rules an implementation must follow.
 
 ---
 

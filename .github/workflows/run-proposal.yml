@@ -1,0 +1,152 @@
+name: Run proposal
+
+# Runs an accepted proposal's prompt through Claude Code and opens the generated
+# changes as a result PR.
+#
+# Trigger: a maintainer adds the `approved` label to a proposal PR. Adding a
+# label requires write access, so that *is* the authorization gate.
+#
+# Safety: this runs in the base-repo context (it has secrets), so it deliberately
+# checks out the DEFAULT BRANCH and never the PR's head — no untrusted PR code is
+# executed. It only reads the proposal's .md text (which a human just reviewed).
+# See proposals/README.md → Security model.
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: run-proposal-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.event.label.name == 'approved'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout the default branch (never the PR's code)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract the proposal prompt (text only, from the PR head)
+        id: proposal
+        run: |
+          set -euo pipefail
+          path="$(gh api "repos/${{ github.repository }}/pulls/${PR}/files" \
+                   --jq '.[] | select(.status=="added") | .filename' \
+                 | grep -E '^proposals/.+\.md$' | head -n1 || true)"
+          if [ -z "$path" ]; then
+            gh pr comment "$PR" --body "🤖 I couldn't find an added \`proposals/*.md\` file in this PR, so there's nothing to run."
+            exit 1
+          fi
+          slug="$(basename "$path" .md)"
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          gh api "repos/${{ github.repository }}/contents/${path}?ref=${HEAD_SHA}" \
+            --jq '.content' | base64 -d > /tmp/proposal.md
+          echo "Proposal ($path):"; cat /tmp/proposal.md
+
+      - name: Assemble the agent prompt
+        run: |
+          cat > /tmp/prompt.md <<'PREAMBLE'
+          You are implementing an accepted community proposal for this repository.
+          You are working directly in the checked-out repo. Follow the conventions
+          in CLAUDE.md.
+
+          Rules:
+          - Implement exactly what the proposal asks; keep the change focused and
+            conventional. If something is underspecified, make a reasonable choice.
+          - Do NOT modify anything under .github/, the proposal pipeline, secrets,
+            or CI config.
+          - Ensure `GOTOOLCHAIN=auto go build ./...`, `go vet ./...`, and
+            `go test ./...` all pass before you finish. Add or update tests where
+            it makes sense.
+          - Finish with a short plain-text summary of what you changed.
+
+          --- PROPOSAL ---
+          PREAMBLE
+          cat /tmp/proposal.md >> /tmp/prompt.md
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Create work branch
+        run: |
+          set -euo pipefail
+          git config user.name  "buycott-agent[bot]"
+          git config user.email "buycott-agent[bot]@users.noreply.github.com"
+          BRANCH="proposal/${{ steps.proposal.outputs.slug }}-${{ github.run_id }}"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          git switch -c "$BRANCH"
+          mkdir -p proposals
+          cp /tmp/proposal.md "proposals/${{ steps.proposal.outputs.slug }}.md"
+
+      - name: Run Claude Code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -o pipefail
+          cat /tmp/prompt.md | claude -p \
+            --permission-mode bypassPermissions \
+            --output-format json \
+            ${{ vars.PROPOSAL_MODEL && format('--model {0}', vars.PROPOSAL_MODEL) || '' }} \
+            > /tmp/result.json || true
+          jq -r '.result // "(no summary returned)"' /tmp/result.json > /tmp/summary.txt 2>/dev/null \
+            || echo "(agent run failed — see logs)" > /tmp/summary.txt
+          echo "=== agent summary ==="; cat /tmp/summary.txt
+
+      - name: Build / vet / test
+        id: build
+        continue-on-error: true
+        run: GOTOOLCHAIN=auto go build ./... && GOTOOLCHAIN=auto go vet ./... && GOTOOLCHAIN=auto go test ./...
+
+      - name: Commit and open result PR
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            gh pr comment "$PR" --body "🤖 Ran the proposal, but it produced no changes. Nothing to open."
+            exit 0
+          fi
+          git add -A
+          git commit -m "proposal: ${{ steps.proposal.outputs.slug }} (by @${AUTHOR})" \
+                     -m "Generated by Claude Code from accepted proposal #${PR}."
+          git push -u origin "$BRANCH"
+
+          {
+            echo "Generated by running the accepted proposal in #${PR} (by @${AUTHOR}) through Claude Code."
+            echo
+            echo "**build / vet / test:** \`${{ steps.build.outcome }}\`"
+            echo
+            echo "**Agent summary**"
+            echo
+            sed 's/^/> /' /tmp/summary.txt
+            echo
+            echo "Closes #${PR}"
+          } > /tmp/pr-body.md
+
+          url="$(gh pr create \
+            --base "$DEFAULT_BRANCH" \
+            --head "$BRANCH" \
+            --title "Run proposal: ${{ steps.proposal.outputs.slug }}" \
+            --body-file /tmp/pr-body.md)"
+          gh pr comment "$PR" --body "🤖 Ran this proposal → ${url} (build/vet/test: ${{ steps.build.outcome }})"
+          gh pr edit "$PR" --add-label "ran" || true

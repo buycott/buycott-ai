@@ -1,0 +1,63 @@
+name: Validate proposal
+
+# Enforces the "submit prompts, not code" rule: a PR from an outside contributor
+# may only add files under proposals/. Maintainers (write access) and the agent's
+# own result branches (proposal/*) are exempt.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  prompts-only:
+    if: >-
+      !startsWith(github.head_ref, 'proposal/') &&
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        run: |
+          base='${{ github.event.pull_request.base.sha }}'
+          head='${{ github.event.pull_request.head.sha }}'
+          offending="$(git diff --name-only "$base" "$head" | grep -vE '^proposals/.+\.md$' || true)"
+          if [ -n "$offending" ]; then
+            {
+              echo 'offending<<EOF'
+              echo "$offending"
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+            echo 'ok=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ok=true' >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.ok == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const offending = process.env.OFFENDING || '';
+            const body = [
+              "👋 Thanks for the interest — but this repo takes **prompts, not code**.",
+              "",
+              "This PR changes files outside `proposals/`:",
+              "```",
+              offending.trim(),
+              "```",
+              "",
+              "Please open a PR that adds a single `proposals/<slug>.md` describing what you want built (copy `proposals/TEMPLATE.md`). A maintainer reviews the prompt, and once it's labeled `approved` an agent runs it and opens the resulting code as a PR. See [`proposals/README.md`](../blob/main/proposals/README.md).",
+            ].join("\n");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            core.setFailed("PR changes files outside proposals/.");
+        env:
+          OFFENDING: ${{ steps.check.outputs.offending }}
