@@ -178,6 +178,10 @@ make compose-conversation   # recent prompt/response exchanges
 
 Open **http://localhost:8000** — live pipeline status, task list, event stream, releases, per-role token usage / cost, and full conversation logs, all updating in real time via SSE. Click any event to expand its full payload. The **Reset run** button clears all state and starts over from scratch (see [`buycott reset`](#pipeline-control)).
 
+### No-install option: prompt packs
+
+Don't want to run the pipeline at all? [`prompt-packs/`](prompt-packs/) contains fill-in-the-blank prompts you paste into an interactive coding-agent session (Claude Code, Codex, or the Gemini CLI) in auto-approve mode — it builds a real, open-ended project and runs until your subscription's rate limit. Zero setup, no Docker, no API key; the lowest-friction way to put a subscription to work.
+
 ---
 
 ## Deployment
