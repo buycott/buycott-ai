@@ -1,8 +1,7 @@
 version: 2
 updates:
-  # Keep GitHub Actions current. (Tags are used for readability; Dependabot will
-  # bump them promptly. To fully SHA-pin, run a pinning tool such as
-  # `pinact` / `pin-github-action` and Dependabot will keep the hashes updated.)
+  # Actions are SHA-pinned (each with a `# vN` comment). Dependabot keeps the
+  # hashes — and the version comments — current.
   - package-ecosystem: github-actions
     directory: /
     schedule:
