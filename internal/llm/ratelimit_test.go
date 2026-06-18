@@ -297,3 +297,60 @@ func TestRetryingProvider_MaxAttemptsReached(t *testing.T) {
 		t.Error("expected at least one RL callback")
 	}
 }
+
+// ── new: subscription limits, units, and max-wait ─────────────────────────────
+
+func TestIsRateLimitErr_SubscriptionPhrasings(t *testing.T) {
+	for _, msg := range []string{
+		"Claude usage limit reached",
+		"You've hit your usage limit",
+		"5-hour limit reached, resets at 5pm",
+		"weekly limit reached",
+		"session limit exceeded",
+	} {
+		if hit, _ := isRateLimitErr(errors.New(msg)); !hit {
+			t.Errorf("expected %q to be detected as a rate limit", msg)
+		}
+	}
+	// Must not false-positive on unrelated errors.
+	for _, msg := range []string{"connection reset", "invalid model"} {
+		if hit, _ := isRateLimitErr(errors.New(msg)); hit {
+			t.Errorf("%q should not be a rate limit", msg)
+		}
+	}
+}
+
+func TestExtractRetryAfter_Units(t *testing.T) {
+	cases := []struct {
+		msg    string
+		lo, hi time.Duration
+	}{
+		{"rate limit: retry after 90 seconds", 90 * time.Second, 92 * time.Second},
+		{"rate limit: retry after 5 minutes", 5 * time.Minute, 5*time.Minute + 2*time.Second},
+		{"rate limit: retry after 2 hours", 2 * time.Hour, 2*time.Hour + 2*time.Second},
+		{"429 retry-after: 1800", 1800 * time.Second, 1802 * time.Second}, // was rejected when capped at <1h
+	}
+	for _, c := range cases {
+		_, d := isRateLimitErr(errors.New(c.msg))
+		if d < c.lo || d > c.hi {
+			t.Errorf("%q: got %v, want in [%v,%v]", c.msg, d, c.lo, c.hi)
+		}
+	}
+}
+
+func TestWithMaxWait(t *testing.T) {
+	inner := &stubProvider{name: "t"}
+	p := NewRetryingProvider(inner, "r", nil).(*RetryingProvider)
+	if p.maxWait != rlDefaultMaxWait {
+		t.Errorf("default maxWait: got %v, want %v", p.maxWait, rlDefaultMaxWait)
+	}
+	p = NewRetryingProvider(inner, "r", nil, WithMaxWait(90*time.Minute)).(*RetryingProvider)
+	if p.maxWait != 90*time.Minute {
+		t.Errorf("WithMaxWait: got %v, want 90m", p.maxWait)
+	}
+	// A non-positive value is ignored (keeps the default).
+	p = NewRetryingProvider(inner, "r", nil, WithMaxWait(0)).(*RetryingProvider)
+	if p.maxWait != rlDefaultMaxWait {
+		t.Errorf("WithMaxWait(0) should keep default; got %v", p.maxWait)
+	}
+}

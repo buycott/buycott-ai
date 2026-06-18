@@ -342,7 +342,7 @@ func (s *LocalServer) buildRoles() (*roles.Registry, roles.PMRole, roles.Reviewe
 			return nil, nil, nil, nil, nil, nil, fmt.Errorf("role %s: %w", name, err)
 		}
 		// Provider chain: raw → retrying (handles 429s) → logging (records exchanges)
-		retryingProvider := llm.NewRetryingProvider(rawProvider, name, rlFn)
+		retryingProvider := llm.NewRetryingProvider(rawProvider, name, rlFn, llm.WithMaxWait(s.cfg.Execution.RateLimitMaxWait))
 		provider := llm.NewLoggingProvider(retryingProvider, name, logSink)
 		providers[name] = provider
 

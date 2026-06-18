@@ -79,6 +79,12 @@ execution:
   # Set to 0 to disable automatic release checks.
   # release_check_interval: 10
 
+  # How long a single LLM call rides out a rate limit before giving up. Set long
+  # enough to wait through a subscription's rolling-window cooldown (~5h) so a
+  # pause doesn't escalate the task and derail an unattended run. Default: 6h.
+  # Bump it (e.g. 168h) to also wait out a weekly cap. Accepts Go durations.
+  # rate_limit_max_wait: 6h
+
 # gRPC control API (used by CLI --server flag and buycott chat).
 # Default: 8080
 api:
