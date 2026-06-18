@@ -9,9 +9,13 @@ import (
 )
 
 const (
-	rlMaxAttempts = 12
-	rlBaseDelay   = 5 * time.Second
-	rlMaxDelay    = 5 * time.Minute
+	rlBaseDelay = 5 * time.Second
+	rlMaxDelay  = 5 * time.Minute
+	// rlDefaultMaxWait is how long a single call will keep retrying a rate limit
+	// before giving up. It's long enough to ride out a full rolling-window
+	// cooldown (e.g. a subscription's ~5-hour limit) unattended, so a pause
+	// doesn't derail the run. Configurable via execution.rate_limit_max_wait.
+	rlDefaultMaxWait = 6 * time.Hour
 )
 
 // isRateLimitErr returns true when err represents an HTTP 429 / quota-exceeded
@@ -30,7 +34,15 @@ func isRateLimitErr(err error) (bool, time.Duration) {
 		strings.Contains(msg, "toomanyrequests") ||
 		strings.Contains(msg, "quota exceeded") ||
 		strings.Contains(msg, "quota_exceeded") ||
-		strings.Contains(msg, "ratelimitexceeded")
+		strings.Contains(msg, "ratelimitexceeded") ||
+		// Subscription-CLI limit phrasings (claude-code / codex / gemini-cli).
+		// Lean inclusive: a missed match derails the run; a false match only
+		// makes a non-rate-limit error wait out max_wait before failing. Verify
+		// against the real CLI output and tune if a version uses other wording.
+		strings.Contains(msg, "usage limit") ||
+		strings.Contains(msg, "limit reached") ||
+		strings.Contains(msg, "weekly limit") ||
+		strings.Contains(msg, "session limit")
 	if !hit {
 		return false, 0
 	}
@@ -63,24 +75,32 @@ func extractRetryAfterFromMsg(msg string) time.Duration {
 		if numEnd == 0 {
 			continue
 		}
-		var secs float64
-		if _, err := strings.NewReader(rest[:numEnd]).Read(nil); err != nil {
-			continue
-		}
-		// Manually convert string to float since we can't use strconv here without
-		// complicating the import; use a simple accumulator.
+		var n float64
 		for _, ch := range rest[:numEnd] {
 			if ch == '.' {
-				continue
+				continue // whole seconds/minutes are fine here; drop the fraction
 			}
-			secs = secs*10 + float64(ch-'0')
+			n = n*10 + float64(ch-'0')
 		}
-		if hasDot {
-			// Rough: treat the decimal part as irrelevant for our purposes
+		if n <= 0 {
+			continue
 		}
-		if secs > 0 && secs < 3600 {
-			return time.Duration(secs)*time.Second + time.Second // +1s safety margin
+		// Honor the unit that follows the number, if any ("30s", "5 min", "2 hours").
+		unit := strings.TrimSpace(rest[numEnd:])
+		mult := time.Second
+		switch {
+		case strings.HasPrefix(unit, "ms"):
+			mult = time.Millisecond
+		case strings.HasPrefix(unit, "h"):
+			mult = time.Hour
+		case strings.HasPrefix(unit, "m"): // minute(s); "ms" is handled above
+			mult = time.Minute
 		}
+		d := time.Duration(n) * mult
+		if d > 24*time.Hour {
+			d = 24 * time.Hour // sanity cap; the retry loop further bounds this by max_wait
+		}
+		return d + time.Second // +1s safety margin
 	}
 	return 0
 }
@@ -114,15 +134,35 @@ type RetryingProvider struct {
 	inner    Provider
 	roleName string
 	onRL     RateLimitFunc
+	maxWait  time.Duration // total time to ride out a rate limit before giving up
 }
 
-func NewRetryingProvider(inner Provider, roleName string, fn RateLimitFunc) Provider {
-	return &RetryingProvider{inner: inner, roleName: roleName, onRL: fn}
+// RetryOption configures a RetryingProvider.
+type RetryOption func(*RetryingProvider)
+
+// WithMaxWait sets how long a single call keeps retrying a rate-limited error
+// before giving up — long enough to ride out a rolling-window cooldown so a
+// pause doesn't derail the run. A non-positive value is ignored (keeps default).
+func WithMaxWait(d time.Duration) RetryOption {
+	return func(p *RetryingProvider) {
+		if d > 0 {
+			p.maxWait = d
+		}
+	}
+}
+
+func NewRetryingProvider(inner Provider, roleName string, fn RateLimitFunc, opts ...RetryOption) Provider {
+	p := &RetryingProvider{inner: inner, roleName: roleName, onRL: fn, maxWait: rlDefaultMaxWait}
+	for _, o := range opts {
+		o(p)
+	}
+	return p
 }
 
 func (p *RetryingProvider) Name() string { return p.inner.Name() }
 
 func (p *RetryingProvider) Complete(ctx context.Context, req CompletionRequest) (CompletionResponse, error) {
+	var waited time.Duration
 	for attempt := 0; ; attempt++ {
 		resp, err := p.inner.Complete(ctx, req)
 		if err == nil {
@@ -133,7 +173,7 @@ func (p *RetryingProvider) Complete(ctx context.Context, req CompletionRequest) 
 		}
 
 		isRL, retryAfter := isRateLimitErr(err)
-		if !isRL || attempt >= rlMaxAttempts {
+		if !isRL || waited >= p.maxWait {
 			return CompletionResponse{}, err
 		}
 
@@ -142,13 +182,15 @@ func (p *RetryingProvider) Complete(ctx context.Context, req CompletionRequest) 
 		if p.onRL != nil {
 			p.onRL(p.roleName, retryAt, attempt+1)
 		}
-		log.Printf("[rate-limit] %s: retry %d/%d in %s", p.roleName, attempt+1, rlMaxAttempts, delay.Round(time.Second))
+		log.Printf("[rate-limit] %s: paused, retry %d in %s (waited %s/%s)",
+			p.roleName, attempt+1, delay.Round(time.Second), waited.Round(time.Second), p.maxWait)
 
 		select {
 		case <-ctx.Done():
 			return CompletionResponse{}, ctx.Err()
 		case <-time.After(delay):
 		}
+		waited += delay
 	}
 }
 
@@ -157,6 +199,7 @@ func (p *RetryingProvider) Complete(ctx context.Context, req CompletionRequest) 
 // mid-stream. If the inner Stream wrote tokens to ch before failing, retrying
 // would produce duplicate output; we accept this as an unlikely edge case.
 func (p *RetryingProvider) Stream(ctx context.Context, req CompletionRequest, ch chan<- string) error {
+	var waited time.Duration
 	for attempt := 0; ; attempt++ {
 		err := p.inner.Stream(ctx, req, ch)
 		if err == nil {
@@ -167,7 +210,7 @@ func (p *RetryingProvider) Stream(ctx context.Context, req CompletionRequest, ch
 		}
 
 		isRL, retryAfter := isRateLimitErr(err)
-		if !isRL || attempt >= rlMaxAttempts {
+		if !isRL || waited >= p.maxWait {
 			return err
 		}
 
@@ -176,12 +219,14 @@ func (p *RetryingProvider) Stream(ctx context.Context, req CompletionRequest, ch
 		if p.onRL != nil {
 			p.onRL(p.roleName, retryAt, attempt+1)
 		}
-		log.Printf("[rate-limit] %s (stream): retry %d/%d in %s", p.roleName, attempt+1, rlMaxAttempts, delay.Round(time.Second))
+		log.Printf("[rate-limit] %s (stream): paused, retry %d in %s (waited %s/%s)",
+			p.roleName, attempt+1, delay.Round(time.Second), waited.Round(time.Second), p.maxWait)
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(delay):
 		}
+		waited += delay
 	}
 }

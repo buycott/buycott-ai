@@ -57,6 +57,11 @@ type ExecutionConfig struct {
 	ReleaseCheckInterval int           `yaml:"release_check_interval"`
 	MinQueueDepth        int           `yaml:"min_queue_depth"`
 	MaxHistoryMessages   int           `yaml:"max_history_messages"`
+	// RateLimitMaxWait is how long a single LLM call keeps retrying a rate-limit
+	// error before giving up. Set long enough to ride out a subscription's
+	// rolling-window cooldown (e.g. ~5h) so a pause doesn't escalate the task and
+	// derail an unattended run. Default 6h.
+	RateLimitMaxWait time.Duration `yaml:"rate_limit_max_wait"`
 	// ArtifactsVolume is the name of a Docker volume to mount into ephemeral
 	// executor containers at /artifacts. Required under socket-forwarding (the
 	// default deployment): the host daemon resolves bind sources as HOST paths,
@@ -165,6 +170,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Execution.MaxHistoryMessages == 0 {
 		c.Execution.MaxHistoryMessages = 20
+	}
+	if c.Execution.RateLimitMaxWait == 0 {
+		c.Execution.RateLimitMaxWait = 6 * time.Hour
 	}
 	if c.API.Port == 0 {
 		c.API.Port = 8080
