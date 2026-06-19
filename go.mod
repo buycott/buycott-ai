@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/anthropics/anthropic-sdk-go v0.2.0-alpha.8
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/google/generative-ai-go v0.19.0
+	github.com/google/generative-ai-go v0.20.1
 	github.com/google/uuid v1.6.0
 	github.com/openai/openai-go v0.1.0-alpha.42
 	github.com/spf13/cobra v1.8.1
